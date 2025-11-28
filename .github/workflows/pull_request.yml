@@ -1,0 +1,20 @@
+name: PR
+on: [pull_request]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # コードの静的解析
+  analysis:
+    uses: nw-union/.github/.github/workflows/code_analysis.yml@main
+    needs: check
+    secrets: inherit
+
+  # PR の設定確認
+  chores:
+    uses: nw-union/.github/.github/workflows/pr_chores.yml@main
+    needs: check
+    secrets: inherit
+
