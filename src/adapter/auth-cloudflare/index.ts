@@ -2,6 +2,7 @@ import { err, fromPromise, ok, okAsync, Result, ResultAsync } from "neverthrow";
 import { match, P } from "ts-pattern";
 import { AuthError } from "../../error";
 import { Auth } from "../../interface";
+import { getTokenFromCookie, getTokenFromHeader } from "../util";
 
 // JWKS型定義
 interface JWK {
@@ -92,7 +93,7 @@ const fetchJWKS = async (jwksUrl: string): Promise<JWKS> => {
 
 // JWK から公開鍵を生成
 const importPublicKey = async (jwk: JWK): Promise<CryptoKey> => {
-  const algorithm = jwk.alg || "RS256";
+  // const algorithm = jwk.alg || "RS256";
 
   if (jwk.kty === "RSA") {
     return await crypto.subtle.importKey(
@@ -210,6 +211,22 @@ const validatePayload = (
   return ok(undefined);
 };
 
+/**
+ * JWT トークンを検証してユーザーのメールアドレスを取得する
+ *
+ * @param jwksUrl - JWKS (JSON Web Key Set) を取得するための URL
+ * @param issuer - トークンの発行者（iss クレーム）の期待値
+ * @param audience - トークンの対象者（aud クレーム）の期待値（オプション）
+ * @returns トークン文字列を受け取り、検証済みのメールアドレスを返す関数
+ *
+ * 検証フロー:
+ * 1. JWT をデコードしてヘッダーとペイロードを取得
+ * 2. ペイロードを検証（有効期限、発行者、対象者など）
+ * 3. JWKS エンドポイントから公開鍵一覧を取得
+ * 4. JWT ヘッダーの kid に一致する公開鍵を検索
+ * 5. 公開鍵をインポートして署名を検証
+ * 6. ペイロードからメールアドレスを抽出して返す
+ */
 const tokenVerify =
   (jwksUrl: string, issuer: string, audience?: string) =>
   (token: string): ResultAsync<string, AuthError> =>
@@ -259,57 +276,15 @@ const tokenVerify =
       (e) => new AuthError(`Invalid JWT token: ${(e as Error).message}`),
     );
 
+const AUTH_HEADER_KEY = "Cf-Access-Jwt-Assertion";
+const AUTH_COOKIE_KEY = "CF_Authorization";
+
 /*
  * リクエストからトークンを取得
  * header で取得できればその値を, できなければ, Cookie から取得を試みる
  * どちらでも取得できなければエラーを返す
  */
 const getToken = (req: Request): Result<string, AuthError> =>
-  getTokenFromHeader(req).orElse(() => getTokenFromCookie(req));
-
-const AUTH_HEADER_KEY = "Cf-Access-Jwt-Assertion";
-// Header からトークンを取得
-const getTokenFromHeader = (req: Request): Result<string, AuthError> =>
-  match(req.headers.get(AUTH_HEADER_KEY))
-    .with(P.string, (token) => ok(token))
-    .with(null, () => err(new AuthError("No JWT token found in headers")))
-    .exhaustive();
-
-const AUTH_COOKIE_KEY = "CF_Authorization";
-
-// Cookie パース用のヘルパー関数
-const parseCookie = (cookieHeader: string): Map<string, string> =>
-  new Map(
-    cookieHeader
-      .split(";")
-      .map((cookie) => {
-        const trimmedCookie = cookie.trim();
-        const separatorIndex = trimmedCookie.indexOf("=");
-        if (separatorIndex === -1) return ["", ""];
-
-        const key = trimmedCookie.slice(0, separatorIndex).trim();
-        const value = trimmedCookie.slice(separatorIndex + 1).trim();
-
-        // Cookie値のデコード処理（RFC 6265準拠）
-        try {
-          return [decodeURIComponent(key), decodeURIComponent(value)];
-        } catch {
-          // デコードに失敗した場合は生の値を使用
-          return [key, value];
-        }
-      })
-      .filter(([key]) => key.length > 0) as [string, string][],
+  getTokenFromHeader(req, AUTH_HEADER_KEY).orElse(() =>
+    getTokenFromCookie(req, AUTH_COOKIE_KEY),
   );
-
-// Cookie からトークンを取得
-const getTokenFromCookie = (req: Request): Result<string, AuthError> =>
-  match(req.headers.get("Cookie"))
-    .with(P.string, (cookieHeader) => {
-      const cookies = parseCookie(cookieHeader);
-      const token = cookies.get(AUTH_COOKIE_KEY);
-      return token
-        ? ok(token.trim())
-        : err(new AuthError("No JWT token found in cookies"));
-    })
-    .with(null, () => err(new AuthError("No Cookie header found")))
-    .exhaustive();
