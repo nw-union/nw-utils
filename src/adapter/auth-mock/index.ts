@@ -7,8 +7,7 @@ const AUTH_HEADER_KEY = "Mock-Access-Assertion";
 const AUTH_COOKIE_KEY = "Mock_Authorization";
 
 export const newAuthMock = (): Auth => ({
-  auth: (req: Request) =>
-    okAsync(req).andThen(getToken),
+  auth: (req: Request) => okAsync(req).andThen(getToken),
 });
 
 const getToken = (req: Request): Result<string, AuthError> =>

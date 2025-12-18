@@ -1,5 +1,4 @@
 import { err, fromPromise, ok, okAsync, Result, ResultAsync } from "neverthrow";
-import { match, P } from "ts-pattern";
 import { AuthError } from "../../error";
 import { Auth } from "../../interface";
 import { getTokenFromCookie, getTokenFromHeader } from "../util";
@@ -37,7 +36,7 @@ interface JWTPayload {
   [key: string]: unknown;
 }
 
-export const newCfAuth = (teamDomain: string, aud?: string): Auth => ({
+export const newAuthCloudflare = (teamDomain: string, aud?: string): Auth => ({
   auth: (req: Request) =>
     okAsync(req)
       // step.1 request からトークンを取得

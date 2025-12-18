@@ -1,5 +1,5 @@
 import type { ResultAsync } from "neverthrow";
-import type { AppError, AuthError } from "./error.ts";
+import type { AppError, AuthError } from "./error.js";
 
 // ----------------------------------------------
 // Logger ロガー

@@ -1,6 +1,6 @@
 {
   "name": "@nw-union/nw-utils",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "description": "Our Typescript Utility Library",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,6 +9,7 @@
     "prepublishOnly": "bun run build",
     "check": "biome check --write src"
   },
+  "type": "module",
   "files": ["dist"],
   "exports": {
     ".": {

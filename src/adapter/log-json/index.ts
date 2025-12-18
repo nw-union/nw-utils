@@ -1,5 +1,4 @@
-import { AppError } from "../../error";
-import { Logger, LogLevel } from "../../interface";
+import { AppError, Logger, LogLevel } from "../../index.js";
 
 const thanLevel = (l1: LogLevel, l2: LogLevel): boolean => {
   const levels: LogLevel[] = ["debug", "info", "warn", "error"];
@@ -18,7 +17,7 @@ const jsonLogFormat = (
     error: e,
   });
 
-export const newJsonLogger = (level: LogLevel): Logger => ({
+export const newLogJson = (level: LogLevel): Logger => ({
   debug: (s: string, e?: AppError) => {
     if (thanLevel(level, "debug")) {
       console.log(jsonLogFormat("debug", s, e));
