@@ -1,6 +1,6 @@
 import { err, ok, Result } from "neverthrow";
 import { match, P } from "ts-pattern";
-import { AuthError } from "../error";
+import { AuthError } from "../error.js";
 
 // Header からトークンを取得
 export const getTokenFromHeader = (

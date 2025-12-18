@@ -1,7 +1,7 @@
 import { err, ok, type Result } from "neverthrow";
 import { match } from "ts-pattern";
 import type { ZodError, z } from "zod";
-import { ValidationError } from "../../error";
+import { ValidationError } from "../../error.js";
 
 /**
  * newType は, ValueObjectを生成関数を作成するためのヘルパー関数

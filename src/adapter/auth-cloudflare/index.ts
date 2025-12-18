@@ -1,7 +1,7 @@
 import { err, fromPromise, ok, okAsync, Result, ResultAsync } from "neverthrow";
-import { AuthError } from "../../error";
-import { Auth } from "../../interface";
-import { getTokenFromCookie, getTokenFromHeader } from "../util";
+import { AuthError } from "../../error.js";
+import { Auth } from "../../interface.js";
+import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 // JWKS型定義
 interface JWK {

@@ -1,7 +1,7 @@
 import { okAsync, Result } from "neverthrow";
-import { AuthError } from "../../error";
-import type { Auth } from "../../interface";
-import { getTokenFromCookie, getTokenFromHeader } from "../util";
+import { AuthError } from "../../error.js";
+import type { Auth } from "../../interface.js";
+import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 const AUTH_HEADER_KEY = "Mock-Access-Assertion";
 const AUTH_COOKIE_KEY = "Mock_Authorization";

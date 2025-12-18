@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { fromShortUuid, toShortUuid, uuidv4 } from "./index";
+import { fromShortUuid, toShortUuid, uuidv4 } from "./index.js";
 
 describe("uuidv4", () => {
   it("有効なUUID v4文字列を生成できること", () => {
