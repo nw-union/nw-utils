@@ -1,6 +1,6 @@
 import { err, fromPromise, ok, okAsync, Result, ResultAsync } from "neverthrow";
 import { AuthError } from "../../error.js";
-import { Auth } from "../../interface.js";
+import type { Auth, User } from "../../interface.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 // JWKS型定義
@@ -27,6 +27,7 @@ interface JWTHeader {
 }
 
 interface JWTPayload {
+  sub?: string;
   iss?: string;
   aud?: string | string[];
   exp?: number;
@@ -211,12 +212,12 @@ const validatePayload = (
 };
 
 /**
- * JWT トークンを検証してユーザーのメールアドレスを取得する
+ * JWT トークンを検証してユーザー情報を取得する
  *
  * @param jwksUrl - JWKS (JSON Web Key Set) を取得するための URL
  * @param issuer - トークンの発行者（iss クレーム）の期待値
  * @param audience - トークンの対象者（aud クレーム）の期待値（オプション）
- * @returns トークン文字列を受け取り、検証済みのメールアドレスを返す関数
+ * @returns トークン文字列を受け取り、検証済みのユーザー情報を返す関数
  *
  * 検証フロー:
  * 1. JWT をデコードしてヘッダーとペイロードを取得
@@ -224,11 +225,11 @@ const validatePayload = (
  * 3. JWKS エンドポイントから公開鍵一覧を取得
  * 4. JWT ヘッダーの kid に一致する公開鍵を検索
  * 5. 公開鍵をインポートして署名を検証
- * 6. ペイロードからメールアドレスを抽出して返す
+ * 6. ペイロードから User ID とメールアドレスを抽出して返す
  */
 const tokenVerify =
   (jwksUrl: string, issuer: string, audience?: string) =>
-  (token: string): ResultAsync<string, AuthError> =>
+  (token: string): ResultAsync<User, AuthError> =>
     fromPromise(
       (async () => {
         // JWT をデコード
@@ -263,14 +264,22 @@ const tokenVerify =
           throw new AuthError("Invalid signature");
         }
 
-        // email を取得
+        // user ID と email を取得
+        const userId = typeof payload.sub === "string" ? payload.sub : null;
+        if (!userId) {
+          throw new AuthError("No user ID (sub claim) found in JWT payload");
+        }
+
         const userEmail =
           typeof payload.email === "string" ? payload.email : null;
         if (!userEmail) {
           throw new AuthError("No email found in JWT payload");
         }
 
-        return userEmail;
+        return {
+          id: userId,
+          mail: userEmail,
+        };
       })(),
       (e) => new AuthError(`Invalid JWT token: ${(e as Error).message}`),
     );

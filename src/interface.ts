@@ -12,7 +12,13 @@ export interface Logger {
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 // ----------------------------------------------
+// User ユーザー情報
+export interface User {
+  id: string; // ユーザー識別子
+  mail: string; // メールアドレス
+}
+
 // Auth 認証
 export interface Auth {
-  auth(req: Request): ResultAsync<string, AuthError>;
+  auth(req: Request): ResultAsync<User, AuthError>;
 }
