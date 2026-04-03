@@ -38,6 +38,36 @@ export const newType =
       )
       .exhaustive();
 
+/**
+ * newVoOrNone は, 空文字列を null として扱う ValueObject 生成関数を作成するためのヘルパー関数
+ *
+ * 入力が空文字列 (`""`) の場合は `ok(null)` を返し、それ以外は `newType` に委譲する。
+ * フォーム入力など、未入力を null で表現したい任意フィールドに適している。
+ *
+ * @param schema valibotのスキーマ
+ * @param type VOの型名
+ *
+ * @example
+ * ```typescript
+ * // OptionalEmail VO の定義
+ * const email = v.pipe(v.string(), v.email(), v.brand("Email"));
+ * export type Email = v.InferOutput<typeof email>;
+ * export const newOptionalEmail = newVoOrNone(email, "Email");
+ *
+ * // 使用方法
+ * const result1 = newOptionalEmail("");              // ok(null)
+ * const result2 = newOptionalEmail("a@example.com"); // ok(Email)
+ * const result3 = newOptionalEmail("invalid");       // err(ValidationError)
+ * ```
+ */
+export const newVoOrNone =
+  <T extends GenericSchema>(schema: T, type: string) =>
+  (
+    src: unknown,
+    name?: string,
+  ): Result<InferOutput<T> | null, ValidationError> =>
+    src === "" ? ok(null) : newType(schema, type)(src, name);
+
 const newValidationError = (
   type: string,
   issues: BaseIssue<unknown>[],
