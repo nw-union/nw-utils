@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@praha/byethrow";
 import { match } from "ts-pattern";
 import {
   type BaseIssue,
@@ -30,18 +30,21 @@ import { ValidationError } from "../../error.js";
  */
 export const newType =
   <T extends GenericSchema>(schema: T, type: string) =>
-  (src: unknown, name?: string): Result<InferOutput<T>, ValidationError> =>
+  (
+    src: unknown,
+    name?: string,
+  ): Result.Result<InferOutput<T>, ValidationError> =>
     match(safeParse(schema, src))
-      .with({ success: true }, ({ output }) => ok(output))
+      .with({ success: true }, ({ output }) => Result.succeed(output))
       .with({ success: false }, ({ issues }) =>
-        err(newValidationError(type, issues, name)),
+        Result.fail(newValidationError(type, issues, name)),
       )
       .exhaustive();
 
 /**
  * newVoOrNone は, 空文字列を null として扱う ValueObject 生成関数を作成するためのヘルパー関数
  *
- * 入力が空文字列 (`""`) の場合は `ok(null)` を返し、それ以外は `newType` に委譲する。
+ * 入力が空文字列 (`""`) の場合は `Result.succeed(null)` を返し、それ以外は `newType` に委譲する。
  * フォーム入力など、未入力を null で表現したい任意フィールドに適している。
  *
  * @param schema valibotのスキーマ
@@ -55,9 +58,9 @@ export const newType =
  * export const newOptionalEmail = newVoOrNone(email, "Email");
  *
  * // 使用方法
- * const result1 = newOptionalEmail("");              // ok(null)
- * const result2 = newOptionalEmail("a@example.com"); // ok(Email)
- * const result3 = newOptionalEmail("invalid");       // err(ValidationError)
+ * const result1 = newOptionalEmail("");              // Result.succeed(null)
+ * const result2 = newOptionalEmail("a@example.com"); // Result.succeed(Email)
+ * const result3 = newOptionalEmail("invalid");       // Result.fail(ValidationError)
  * ```
  */
 export const newVoOrNone =
@@ -65,8 +68,8 @@ export const newVoOrNone =
   (
     src: unknown,
     name?: string,
-  ): Result<InferOutput<T> | null, ValidationError> =>
-    src === "" ? ok(null) : newType(schema, type)(src, name);
+  ): Result.Result<InferOutput<T> | null, ValidationError> =>
+    src === "" ? Result.succeed(null) : newType(schema, type)(src, name);
 
 const newValidationError = (
   type: string,

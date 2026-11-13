@@ -1,4 +1,4 @@
-import { err, ok, Result } from "neverthrow";
+import { Result } from "@praha/byethrow";
 import { match, P } from "ts-pattern";
 import { AuthError } from "../error.js";
 
@@ -6,26 +6,26 @@ import { AuthError } from "../error.js";
 export const getTokenFromHeader = (
   req: Request,
   headerKey: string,
-): Result<string, AuthError> =>
+): Result.Result<string, AuthError> =>
   match(req.headers.get(headerKey))
-    .with(P.string, (token) => ok(token))
-    .with(null, () => err(new AuthError("No token found in headers")))
+    .with(P.string, (token) => Result.succeed(token))
+    .with(null, () => Result.fail(new AuthError("No token found in headers")))
     .exhaustive();
 
 // Cookie からトークンを取得
 export const getTokenFromCookie = (
   req: Request,
   cookieKey: string,
-): Result<string, AuthError> =>
+): Result.Result<string, AuthError> =>
   match(req.headers.get("Cookie"))
     .with(P.string, (cookieHeader) => {
       const cookies = parseCookie(cookieHeader);
       const token = cookies.get(cookieKey);
       return token
-        ? ok(token.trim())
-        : err(new AuthError("No token found in cookies"));
+        ? Result.succeed(token.trim())
+        : Result.fail(new AuthError("No token found in cookies"));
     })
-    .with(null, () => err(new AuthError("No Cookie header found")))
+    .with(null, () => Result.fail(new AuthError("No Cookie header found")))
     .exhaustive();
 
 // Cookie パース用のヘルパー関数

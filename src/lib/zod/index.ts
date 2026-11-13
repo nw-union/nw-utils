@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@praha/byethrow";
 import { match } from "ts-pattern";
 import type { ZodError, z } from "zod";
 import { ValidationError } from "../../error.js";
@@ -24,11 +24,11 @@ import { ValidationError } from "../../error.js";
  */
 export const newType =
   <T extends z.ZodTypeAny>(schema: T, type: string) =>
-  (src: unknown, name?: string): Result<z.infer<T>, ValidationError> =>
+  (src: unknown, name?: string): Result.Result<z.infer<T>, ValidationError> =>
     match(schema.safeParse(src))
-      .with({ success: true }, ({ data }) => ok(data))
+      .with({ success: true }, ({ data }) => Result.succeed(data))
       .with({ success: false }, ({ error }) =>
-        err(newValidationError(type, error, name)),
+        Result.fail(newValidationError(type, error, name)),
       )
       .exhaustive();
 

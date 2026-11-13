@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "neverthrow";
+import { Result } from "@praha/byethrow";
 
 /**
  * Web Crypto API を使用した UUID v4 生成
@@ -35,14 +35,14 @@ export const uuidv4 = (): string => {
  * - 出力はURLセーフな 22 文字
  * - 入力はUUID v4 前提だが、16バイトのUUIDであれば一般に動作
  */
-export const toShortUuid = (uuid: string): Result<string, Error> =>
-  uuidToBytes(uuid).map(base64UrlEncode);
+export const toShortUuid = (uuid: string): Result.Result<string, Error> =>
+  Result.pipe(uuidToBytes(uuid), Result.map(base64UrlEncode));
 
 /**
  * Base64URLで短縮されたUUID文字列(22文字)を通常のUUID表記に復元する
  */
-export const fromShortUuid = (short: string): Result<string, Error> =>
-  base64UrlDecode(short).andThen(bytesToUuid);
+export const fromShortUuid = (short: string): Result.Result<string, Error> =>
+  Result.pipe(base64UrlDecode(short), Result.andThen(bytesToUuid));
 
 // ----------------------------------------------------------------------------
 // Internal Utils
@@ -50,28 +50,30 @@ export const fromShortUuid = (short: string): Result<string, Error> =>
 const uuidRegex =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-const uuidToBytes = (uuid: string): Result<Uint8Array, Error> => {
+const uuidToBytes = (uuid: string): Result.Result<Uint8Array, Error> => {
   if (!uuidRegex.test(uuid)) {
-    return err(new Error(`Invalid UUID format: ${uuid}`));
+    return Result.fail(new Error(`Invalid UUID format: ${uuid}`));
   }
   const hex = uuid.replace(/-/g, "").toLowerCase();
   const bytes = new Uint8Array(16);
   for (let i = 0; i < 16; i++) {
     const v = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    if (Number.isNaN(v)) return err(new Error("Invalid hex in UUID"));
+    if (Number.isNaN(v)) return Result.fail(new Error("Invalid hex in UUID"));
     bytes[i] = v;
   }
-  return ok(bytes);
+  return Result.succeed(bytes);
 };
 
-const bytesToUuid = (bytes: Uint8Array): Result<string, Error> => {
+const bytesToUuid = (bytes: Uint8Array): Result.Result<string, Error> => {
   if (bytes.length !== 16) {
-    return err(new Error(`Invalid byte length for UUID: ${bytes.length}`));
+    return Result.fail(
+      new Error(`Invalid byte length for UUID: ${bytes.length}`),
+    );
   }
   const hex = Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  return ok(
+  return Result.succeed(
     [
       hex.slice(0, 8),
       hex.slice(8, 12),
@@ -91,9 +93,9 @@ const base64UrlEncode = (bytes: Uint8Array): string => {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 };
 
-const base64UrlDecode = (short: string): Result<Uint8Array, Error> => {
+const base64UrlDecode = (short: string): Result.Result<Uint8Array, Error> => {
   if (!/^[A-Za-z0-9_-]{22,24}$/.test(short)) {
-    return err(new Error(`Invalid short UUID format: ${short}`));
+    return Result.fail(new Error(`Invalid short UUID format: ${short}`));
   }
   let base64 = short.replace(/-/g, "+").replace(/_/g, "/");
   const pad = base64.length % 4;
@@ -102,8 +104,8 @@ const base64UrlDecode = (short: string): Result<Uint8Array, Error> => {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return ok(bytes);
+    return Result.succeed(bytes);
   } catch (_e) {
-    return err(new Error("Invalid base64 input"));
+    return Result.fail(new Error("Invalid base64 input"));
   }
 };

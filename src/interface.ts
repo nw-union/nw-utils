@@ -1,4 +1,4 @@
-import type { ResultAsync } from "neverthrow";
+import type { Result } from "@praha/byethrow";
 import type { AppError, AuthError } from "./error.js";
 
 // ----------------------------------------------
@@ -20,5 +20,5 @@ export interface User {
 
 // Auth 認証
 export interface Auth {
-  auth(req: Request): ResultAsync<User, AuthError>;
+  auth(req: Request): Result.ResultAsync<User, AuthError>;
 }
