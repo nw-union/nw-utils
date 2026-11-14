@@ -16,7 +16,6 @@ jobs:
     uses: nw-union/.github/.github/workflows/pr_chores.yml@main
     secrets: inherit
 
-
   # テスト
   test:
     runs-on: ubuntu-latest
