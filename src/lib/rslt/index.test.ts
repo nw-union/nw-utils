@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { match, P } from "ts-pattern";
+import { match, P } from "../match/index.js";
 import {
   collect,
   collectAsync,
@@ -48,18 +48,18 @@ describe("Result の値", () => {
     expect(JSON.stringify(ok(1))).toBe('{"type":"Success","value":1}');
     expect(JSON.stringify(err("e"))).toBe('{"type":"Failure","error":"e"}');
   });
-  it("ts-pattern で分岐できる", () => {
+  it("match で分岐できる", () => {
     const f = (r: Result<number, string>) =>
       match(r)
-        .with({ type: "Success" }, ({ value }) => `ok:${value}`)
-        .with({ type: "Failure" }, ({ error }) => `err:${error}`)
+        .ok((value) => `ok:${value}`)
+        .err((error) => `err:${error}`)
         .exhaustive();
     expect(f(ok(1))).toBe("ok:1");
     expect(f(err("e"))).toBe("err:e");
   });
 });
 
-describe("ts-pattern との組み合わせ", () => {
+describe("lib/match との組み合わせ", () => {
   class NotFound extends Error {
     readonly kind = "NotFound";
   }
@@ -73,20 +73,20 @@ describe("ts-pattern との組み合わせ", () => {
         ? err(new Forbidden("forbidden"))
         : err(new NotFound("not found"));
 
-  it("Success / Failure の片方を書き忘れると exhaustive() が型エラーになる", () => {
+  it(".ok / .err の片方を書き忘れると exhaustive() が型エラーになる", () => {
     const _check = (r: Result<number, string>) =>
       match(r)
-        .with({ type: "Success" }, ({ value }) => value)
-        // @ts-expect-error Failure の分岐がない
+        .ok((value) => value)
+        // @ts-expect-error .err の分岐がない
         .exhaustive();
   });
 
   it("エラーのクラスごとに分岐できる (P.instanceOf)", () => {
     const toStatus = (r: Result<{ name: string }, NotFound | Forbidden>) =>
       match(r)
-        .with({ type: "Success" }, () => 200)
-        .with({ type: "Failure", error: P.instanceOf(NotFound) }, () => 404)
-        .with({ type: "Failure", error: P.instanceOf(Forbidden) }, () => 403)
+        .ok(() => 200)
+        .err(P.instanceOf(NotFound), () => 404)
+        .err(P.instanceOf(Forbidden), () => 403)
         .exhaustive();
     expect([toStatus(find(1)), toStatus(find(2)), toStatus(find(3))]).toEqual([
       200, 403, 404,
@@ -96,8 +96,8 @@ describe("ts-pattern との組み合わせ", () => {
   it("エラーのクラスを 1 つ書き忘れると exhaustive() が型エラーになる", () => {
     const _check = (r: Result<{ name: string }, NotFound | Forbidden>) =>
       match(r)
-        .with({ type: "Success" }, () => 200)
-        .with({ type: "Failure", error: P.instanceOf(NotFound) }, () => 404)
+        .ok(() => 200)
+        .err(P.instanceOf(NotFound), () => 404)
         // @ts-expect-error Forbidden の分岐がない
         .exhaustive();
   });
@@ -105,9 +105,9 @@ describe("ts-pattern との組み合わせ", () => {
   it("成功値の中身でも分岐でき、P.select で取り出せる", () => {
     const greet = (r: Result<{ name: string }, NotFound | Forbidden>) =>
       match(r)
-        .with({ type: "Success", value: { name: "a" } }, () => "admin")
-        .with({ type: "Success", value: { name: P.select() } }, (name) => name)
-        .with({ type: "Failure" }, ({ error }) => error.message)
+        .ok({ name: "a" }, () => "admin")
+        .ok({ name: P.select() }, (name) => name)
+        .err((error) => error.message)
         .exhaustive();
     expect(greet(find(1))).toBe("admin");
     expect(greet(ok({ name: "b" }))).toBe("b");
@@ -120,8 +120,8 @@ describe("ts-pattern との組み合わせ", () => {
       rslt.map((u) => u.name.toUpperCase()),
       (r) =>
         match(r)
-          .with({ type: "Success" }, ({ value }) => `Hello, ${value}`)
-          .with({ type: "Failure" }, ({ error }) => `Error: ${error.message}`)
+          .ok((value) => `Hello, ${value}`)
+          .err((error) => `Error: ${error.message}`)
           .exhaustive(),
     );
     expect(message).toBe("Hello, A");

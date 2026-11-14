@@ -30,7 +30,7 @@ type Result<T, E> = Success<T> | Failure<E>;
 type ResultAsync<T, E> = Promise<Result<T, E>>;
 ```
 
-Result はクラスではなく、書き換え不可 (frozen) の普通のオブジェクトです。JSON にしたり、`ts-pattern` でそのまま分岐したりできます。
+Result はクラスではなく、書き換え不可 (frozen) の普通のオブジェクトです。JSON にしたり、`lib/match` でそのまま分岐したりできます。
 
 ## 作る
 
@@ -61,22 +61,22 @@ const toUser = (r: Result<string, AuthError>): Result<User, AuthError> => {
 };
 ```
 
-### ts-pattern で値に変える
+### lib/match で値に変える
 
-Result を最後に値 (レスポンス、メッセージなど) へ変えるときは、`ts-pattern` の `match` を使います。このライブラリに `match` / `fold` はありません。
+Result を最後に値 (レスポンス、メッセージなど) へ変えるときは、`lib/match` の `match` を使います。このライブラリに `match` / `fold` はありません。
 
 ```typescript
-import { match, P } from "ts-pattern";
+import { match, P } from "@nw-union/nw-utils/lib/match";
 
 const status = match(findUser(id)) // Result<User, NotFoundError | ForbiddenError>
-  .with({ type: "Success" }, ({ value }) => json(value, 200))
-  .with({ type: "Failure", error: P.instanceOf(NotFoundError) }, () => json(null, 404))
-  .with({ type: "Failure", error: P.instanceOf(ForbiddenError) }, () => json(null, 403))
+  .ok((user) => json(user, 200))
+  .err(P.instanceOf(NotFoundError), () => json(null, 404))
+  .err(P.instanceOf(ForbiddenError), () => json(null, 403))
   .exhaustive();
 ```
 
-- `exhaustive()` を付けると、`Success` / `Failure` やエラーのクラスの分岐を書き忘れたときに型エラーになります
-- `value` / `error` の中身でも分岐できます (`{ type: "Success", value: { role: "admin" } }` など)
+- `exhaustive()` を付けると、`.ok` / `.err` やエラーのクラスの分岐を書き忘れたときに型エラーになります
+- 値やエラーの中身でも分岐できます (`.ok({ role: "admin" }, ...)` など)
 - `rslt.pipe` の最後に `(r) => match(r)...exhaustive()` を置けば、変換から値への変換までを 1 つの式で書けます
 
 ## つなげる
