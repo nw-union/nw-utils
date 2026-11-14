@@ -1,10 +1,10 @@
 /**
- * src/lib/rslt/result.ts の flow / flowAsync のオーバーロードを生成する
+ * src/lib/rslt/result.ts の flow / flowAsync / pipe のオーバーロードを生成する
  *
  * - `bun run gen`        : 生成してファイルを書き換える
  * - `bun run gen --check`: 生成結果とファイルが一致するか確認する (不一致なら exit 1)
  *
- * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync も同様)
+ * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync / pipe も同様)
  */
 const FILE = "src/lib/rslt/result.ts";
 const MAX = 10; // つなげられる関数の最大数
@@ -28,6 +28,22 @@ const overloads = (name: "flow" | "flowAsync"): string => {
     const ret = `${isAsync ? "ResultAsync" : "Result"}<${val(bs[n - 1])}, E | ${bs.map(errOf).join(" | ")}>`;
     lines.push(
       `export function ${name}<A, E, ${bs.join(", ")}>(${params.join(", ")}): ${ret};`,
+    );
+  }
+  return lines.join("\n");
+};
+
+// pipe: 値を左から順に関数へ通す (関数 0〜MAX 個)
+const pipeOverloads = (): string => {
+  const lines: string[] = [];
+  for (let n = 0; n <= MAX; n++) {
+    const ts = ["A", ...Array.from({ length: n }, (_, i) => `B${i + 1}`)];
+    const params = [
+      "a: A",
+      ...ts.slice(1).map((t, i) => `f${i + 1}: (v: ${ts[i]}) => ${t}`),
+    ];
+    lines.push(
+      `export function pipe<${ts.join(", ")}>(${params.join(", ")}): ${ts[n]};`,
     );
   }
   return lines.join("\n");
@@ -61,6 +77,7 @@ let next = current;
 for (const name of ["flow", "flowAsync"] as const) {
   next = replaceBlock(next, name, overloads(name));
 }
+next = replaceBlock(next, "pipe", pipeOverloads());
 next = format(next);
 
 if (process.argv.includes("--check")) {
