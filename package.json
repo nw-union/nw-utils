@@ -12,6 +12,7 @@
   },
   "type": "module",
   "files": ["dist"],
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

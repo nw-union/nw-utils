@@ -4,12 +4,12 @@ import { isErr, isOk, type Result } from "../result/index.js";
 import { newType, newVoOrNone } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
-const unwrap = <T, E>(r: Result.Result<T, E>): T => {
+const unwrap = <T, E>(r: Result<T, E>): T => {
   if (isErr(r))
     throw new Error(`expected Success but got Failure: ${String(r.error)}`);
   return r.value;
 };
-const unwrapErr = <T, E>(r: Result.Result<T, E>): E => {
+const unwrapErr = <T, E>(r: Result<T, E>): E => {
   if (isOk(r)) throw new Error("expected Failure but got Success");
   return r.error;
 };

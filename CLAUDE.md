@@ -65,28 +65,28 @@ AppError (基底クラス)
 
 #### Auth
 認証インターフェース。`Request` を受け取り、ユーザー識別子（通常はメールアドレス）を返します。
-- 戻り値: `Result.ResultAsync<User, AuthError>`
+- 戻り値: `ResultAsync<User, AuthError>`
 
 ### ライブラリ機能
 
 #### Result ライブラリ (lib/result/)
 
-外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数にして tree-shaking を効かせている。`import { err, flow, flowAsync, isErr, isOk, ok, Result } from "@nw-union/nw-utils/lib/result"` で使う (それ以外の関数は `Result.map` のように使う)。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。`import { err, isErr, ok, rsltMap, type Result } from "@nw-union/nw-utils/lib/result"` のように必要なものだけ import する。`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` 以外の関数は `rslt` から始まる名前。
 
-- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
-- 生成: `ok`, `err`, `Result.try` (同期), `Result.tryAsync` (非同期)
+- 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
+- 生成: `ok`, `err`, `rsltTry` (同期), `rsltTryAsync` (非同期)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
-- 変換: `Result.map`, `Result.mapError`, `Result.andThen`, `Result.orElse` (すべて同期・data-first)
+- 変換: `rsltMap`, `rsltMapError`, `rsltAndThen`, `rsltOrElse` (すべて同期・data-first)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
-- 集約: `Result.sequence` (最初の Failure), `Result.collect` (全エラー), `Result.sequenceAsync`, `Result.collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
+- 集約: `rsltSequence` (最初の Failure), `rsltCollect` (全エラー), `rsltSequenceAsync`, `rsltCollectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:
 
 ```typescript
-const f = async (id: string): Result.ResultAsync<User, AppError> => {
+const f = async (id: string): ResultAsync<User, AppError> => {
   const valid = validateId(id);
   if (isErr(valid)) return valid;
-  return Result.tryAsync(() => fetchUser(valid.value), toAppError);
+  return rsltTryAsync(() => fetchUser(valid.value), toAppError);
 };
 ```
 
@@ -107,7 +107,7 @@ Value Object パターンを簡単に実装するためのヘルパー関数を�
 
 **主な関数**:
 - `newType<T>(schema, type)`: Zod スキーマから型安全な VO 生成関数を作成
-  - 入力値をバリデーションし、`Result.Result<T, ValidationError>` を返す
+  - 入力値をバリデーションし、`Result<T, ValidationError>` を返す
   - バリデーションエラーは自動的に `ValidationError` に変換される
 
 **使用例**:
@@ -138,7 +138,7 @@ Cloudflare Access による JWT 認証を実装したアダプター。
 **使用方法**:
 ```typescript
 const auth = newCfAuth("https://your-team.cloudflareaccess.com", "your-aud");
-const result = await auth.auth(request); // Result.Result<User, AuthError>
+const result = await auth.auth(request); // Result<User, AuthError>
 ```
 
 内部実装:
@@ -178,7 +178,7 @@ bun run gen          # lib/result の flow / flowAsync のオーバーロード�
 
 ## 注意事項
 
-- すべての非同期エラーハンドリングは `Result.ResultAsync` を使用すること
+- すべての非同期エラーハンドリングは `ResultAsync` を使用すること
 - カスタムエラーを追加する場合は `error.ts` の階層に従うこと
 - 新しいアダプターは `interface.ts` で定義されたインターフェースを実装すること
 - Cloudflare Workers 環境では Node.js 固有の API を使用しないこと

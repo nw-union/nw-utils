@@ -24,7 +24,7 @@ import { err, ok, type Result } from "../result/index.js";
  */
 export const newType =
   <T extends z.ZodTypeAny>(schema: T, type: string) =>
-  (src: unknown, name?: string): Result.Result<z.infer<T>, ValidationError> =>
+  (src: unknown, name?: string): Result<z.infer<T>, ValidationError> =>
     match(schema.safeParse(src))
       .with({ success: true }, ({ data }) => ok(data))
       .with({ success: false }, ({ error }) =>

@@ -53,9 +53,9 @@ export const isErr = <T, E>(r: Result<T, E>): r is Failure<E> =>
 /**
  * 例外を投げうる同期関数を実行し、Result に変換する
  *
- * 非同期関数には `tryAsync` を使うこと
+ * 非同期関数には `rsltTryAsync` を使うこと
  */
-const try_ = <T, E>(
+export const rsltTry = <T, E>(
   fn: () => T & NotPromise<T>,
   onError: (e: unknown) => E,
 ): Result<T, E> => {
@@ -66,14 +66,12 @@ const try_ = <T, E>(
   }
 };
 
-export { try_ as try };
-
 /**
  * 例外を投げうる非同期関数を実行し、ResultAsync に変換する
  *
  * fn が同期的に例外を投げた場合や reject した場合も Failure になる
  */
-export const tryAsync = async <T, E>(
+export const rsltTryAsync = async <T, E>(
   fn: () => Promise<T>,
   onError: (e: unknown) => E,
 ): ResultAsync<T, E> => {
@@ -90,23 +88,25 @@ export const tryAsync = async <T, E>(
 // ----------------------------------------------------------------------------
 
 /** 成功値を変換する */
-export const map = <T, U, E>(r: Result<T, E>, fn: (v: T) => U): Result<U, E> =>
-  isOk(r) ? ok(fn(r.value)) : r;
+export const rsltMap = <T, U, E>(
+  r: Result<T, E>,
+  fn: (v: T) => U,
+): Result<U, E> => (isOk(r) ? ok(fn(r.value)) : r);
 
 /** エラーを変換する */
-export const mapError = <T, E, F>(
+export const rsltMapError = <T, E, F>(
   r: Result<T, E>,
   fn: (e: E) => F,
 ): Result<T, F> => (isErr(r) ? err(fn(r.error)) : r);
 
 /** 成功値から次の Result を返す処理につなげる */
-export const andThen = <T, U, E, F>(
+export const rsltAndThen = <T, U, E, F>(
   r: Result<T, E>,
   fn: (v: T) => Result<U, F>,
 ): Result<U, E | F> => (isOk(r) ? fn(r.value) : r);
 
 /** 失敗時に別の Result を返す処理にフォールバックする */
-export const orElse = <T, U, E, F>(
+export const rsltOrElse = <T, U, E, F>(
   r: Result<T, E>,
   fn: (e: E) => Result<U, F>,
 ): Result<T | U, F> => (isErr(r) ? fn(r.error) : r);
@@ -143,7 +143,7 @@ const isResult = (x: unknown): x is Result<unknown, unknown> => {
  *
  * @example
  * ```typescript
- * const user = Result.flow(ok(req), getToken, tokenToUser);
+ * const user = flow(ok(req), getToken, tokenToUser);
  * // getToken: (req: Request) => Result<string, AuthError>
  * // tokenToUser: (token: string) => User
  * // user: Result<User, AuthError>
@@ -299,7 +299,7 @@ export function flow(
  *
  * @example
  * ```typescript
- * const user = await Result.flowAsync(ok(req), getToken, verifyToken, toUser);
+ * const user = await flowAsync(ok(req), getToken, verifyToken, toUser);
  * // verifyToken: (token: string) => ResultAsync<Payload, AuthError>
  * ```
  */
@@ -548,11 +548,13 @@ const awaitAll = async (
  *
  * @example
  * ```typescript
- * Result.sequence([ok(1), ok("a")]); // ok([1, "a"])  型: Result<[number, string], never>
- * Result.sequence({ id: newId(x), mail: newEmail(y) }); // Result<{ id: Id; mail: Email }, ValidationError>
+ * rsltSequence([ok(1), ok("a")]); // ok([1, "a"])  型: Result<[number, string], never>
+ * rsltSequence({ id: newId(x), mail: newEmail(y) }); // Result<{ id: Id; mail: Email }, ValidationError>
  * ```
  */
-export const sequence = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
+export const rsltSequence = <
+  const T extends ShapeOf<T, Result<unknown, unknown>>,
+>(
   x: T,
 ): Result<Values<T>, ErrOf<Item<T>>> =>
   sequenceImpl(x as ResultRecord<Result<unknown, unknown>>) as Result<
@@ -569,11 +571,13 @@ export const sequence = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
  * @example
  * ```typescript
  * // フォームの全項目を検証し、エラーをまとめて返す
- * Result.collect({ id: newId(x), mail: newEmail(y) });
+ * rsltCollect({ id: newId(x), mail: newEmail(y) });
  * // Result<{ id: Id; mail: Email }, ValidationError[]>
  * ```
  */
-export const collect = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
+export const rsltCollect = <
+  const T extends ShapeOf<T, Result<unknown, unknown>>,
+>(
   x: T,
 ): Result<Values<T>, ErrOf<Item<T>>[]> =>
   collectImpl(x as ResultRecord<Result<unknown, unknown>>) as Result<
@@ -582,18 +586,18 @@ export const collect = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
   >;
 
 /**
- * `sequence` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
+ * `rsltSequence` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
  *
  * すべての完了を待ってから、入力の順番で最初の Failure を返す
  * (途中で失敗しても他の処理は止まらないため、完了を待つことで reject の取りこぼしを防ぐ)
  *
  * @example
  * ```typescript
- * const r = await Result.sequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
+ * const r = await rsltSequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
  * // Result<{ user: User; posts: Post[] }, ApiError>
  * ```
  */
-export const sequenceAsync = async <
+export const rsltSequenceAsync = async <
   const T extends ShapeOf<
     T,
     Result<unknown, unknown> | ResultAsync<unknown, unknown>
@@ -610,15 +614,15 @@ export const sequenceAsync = async <
   ) as Result<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>>;
 
 /**
- * `collect` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
+ * `rsltCollect` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
  *
  * @example
  * ```typescript
- * const r = await Result.collectAsync([saveA(a), saveB(b)]);
+ * const r = await rsltCollectAsync([saveA(a), saveB(b)]);
  * // Result<[A, B], DbError[]>
  * ```
  */
-export const collectAsync = async <
+export const rsltCollectAsync = async <
   const T extends ShapeOf<
     T,
     Result<unknown, unknown> | ResultAsync<unknown, unknown>

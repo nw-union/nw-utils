@@ -6,7 +6,7 @@ import { err, ok, type Result } from "../lib/result/index.js";
 export const getTokenFromHeader = (
   req: Request,
   headerKey: string,
-): Result.Result<string, AuthError> =>
+): Result<string, AuthError> =>
   match(req.headers.get(headerKey))
     .with(P.string, (token) => ok(token))
     .with(null, () => err(new AuthError("No token found in headers")))
@@ -16,7 +16,7 @@ export const getTokenFromHeader = (
 export const getTokenFromCookie = (
   req: Request,
   cookieKey: string,
-): Result.Result<string, AuthError> =>
+): Result<string, AuthError> =>
   match(req.headers.get("Cookie"))
     .with(P.string, (cookieHeader) => {
       const cookies = parseCookie(cookieHeader);
