@@ -1,3 +1,5 @@
+import type { Failure, Success } from "../rslt/index.js";
+
 // ----------------------------------------------------------------------------
 // パターン (P)
 // ----------------------------------------------------------------------------
@@ -97,11 +99,22 @@ export type Pattern<I> = unknown extends I
 type NarrowLeaf<I, T> = [I] extends [T] ? I : [T] extends [I] ? T : never;
 
 /** パターン `Pat` に一致しうる `I` の部分 */
-export type Narrow<I, Pat> = unknown extends I
-  ? I
-  : I extends unknown
-    ? NarrowOne<I, Pat>
-    : never;
+export type Narrow<I, Pat> =
+  IsWildcard<Pat> extends true
+    ? I // 入力を見ずに決める (I が型パラメータのままでも解決できるように)
+    : unknown extends I
+      ? I
+      : I extends unknown
+        ? NarrowOne<I, Pat>
+        : never;
+
+/** 何にでも一致するパターン (P._ / P.select()) か */
+type IsWildcard<Pat> =
+  Pat extends Matcher<infer T, boolean>
+    ? unknown extends T
+      ? true
+      : false
+    : false;
 
 type NarrowOne<I, Pat> =
   Pat extends UnionPattern<infer Ps>
@@ -122,8 +135,20 @@ type NarrowOne<I, Pat> =
 type NarrowEach<I, Q> = Q extends unknown ? NarrowOne<I, Q> : never;
 
 type NarrowObject<I, Pat> = [Exclude<keyof Pat, keyof I>] extends [never]
-  ? NarrowFields<I, Pat, { [K in keyof Pat]: Narrow<I[K & keyof I], Pat[K]> }>
+  ? NarrowFields<
+      I,
+      Pat,
+      { [K in CheckedKeys<Pat>]: Narrow<I[K & keyof I], Pat[K]> }
+    >
   : never;
+
+/**
+ * 値を確かめる必要のあるキー (P._ / P.select() のキーは除く)
+ * (何にでも一致するキーは型を変えないので、型パラメータのままの値でも計算が止まらないように飛ばす)
+ */
+type CheckedKeys<Pat> = {
+  [K in keyof Pat]: IsWildcard<Pat[K]> extends true ? never : K;
+}[keyof Pat];
 
 type NarrowFields<I, Pat, N> = [
   { [K in keyof N]: [N[K]] extends [never] ? K : never }[keyof N],
@@ -181,9 +206,12 @@ export type Handled<I, Pat> = [FindSelect<Narrow<I, Pat>, Pat>] extends [never]
 // - P.union → 中のパターンを前から順に取り除く
 
 /** `R` からパターン `Pat` に必ず一致する部分を取り除く */
-export type ExcludeMatched<R, Pat> = R extends unknown
-  ? ExcludeOne<R, Pat>
-  : never;
+export type ExcludeMatched<R, Pat> =
+  IsWildcard<Pat> extends true
+    ? never // 入力を見ずに決める (R が型パラメータのままでも解決できるように)
+    : R extends unknown
+      ? ExcludeOne<R, Pat>
+      : never;
 
 type ExcludeOne<R, Pat> =
   Pat extends UnionPattern<infer Ps>
@@ -204,7 +232,12 @@ type ExcludeOne<R, Pat> =
             : [Extract<keyof Pat, OptionalKeys<R>>] extends [never]
               ? ExcludeFields<
                   R,
-                  { [K in keyof Pat]: ExcludeMatched<R[K & keyof R], Pat[K]> }
+                  {
+                    [K in CheckedKeys<Pat>]: ExcludeMatched<
+                      R[K & keyof R],
+                      Pat[K]
+                    >;
+                  }
                 >
               : R // 省略できるキーは、値がなければ一致しないので取り除かない
           : R;
@@ -240,6 +273,14 @@ type IsSingle<U, All = U> = U extends unknown
 // 型: ビルダー
 // ----------------------------------------------------------------------------
 
+/**
+ * 実際には存在しえない Result のメンバー
+ * (`ok(1)` の型 `Result<number, never>` で `.err` を書かなくてよいように、残っていても網羅とみなす)
+ */
+type Impossible =
+  | { readonly type: "Failure"; readonly error: never }
+  | { readonly type: "Success"; readonly value: never };
+
 /** 網羅されていないときに `.exhaustive` が取る型 (`Remaining` が残っている型) */
 export type NonExhaustive<Remaining> = {
   readonly 分岐が足りません: Remaining;
@@ -261,8 +302,15 @@ type Reachable<Remaining, Pat> = [Narrow<Remaining, Pat>] extends [never]
  * - `I`: 入力の型
  * - `R`: handler の戻り値の union
  * - `Remaining`: まだどの分岐にも一致していない型
+ *
+ * 入力に lib/rslt の Result が含まれるときだけ `.ok` / `.err` が使える
  */
-export type Match<I, R, Remaining> = {
+export type Match<I, R, Remaining> = MatchBase<I, R, Remaining> &
+  ([Extract<I, Success<unknown> | Failure<unknown>>] extends [never]
+    ? unknown
+    : ResultCases<I, R, Remaining>);
+
+type MatchBase<I, R, Remaining> = {
   /**
    * パターンに一致したら handler を呼ぶ (最初に一致した分岐だけ)
    *
@@ -280,7 +328,50 @@ export type Match<I, R, Remaining> = {
    */
   readonly exhaustive: [Remaining] extends [never]
     ? () => R
-    : NonExhaustive<Remaining>;
+    : [Remaining] extends [Impossible]
+      ? () => R
+      : NonExhaustive<Remaining>;
+};
+
+/** Success の値の型 */
+type OkValue<I> = Extract<I, Success<unknown>>["value"];
+
+/** Failure のエラーの型 */
+type ErrValue<I> = Extract<I, Failure<unknown>>["error"];
+
+type OkPattern<Pat> = { readonly type: "Success"; readonly value: Pat };
+type ErrPattern<Pat> = { readonly type: "Failure"; readonly error: Pat };
+type Wildcard = Matcher<unknown>;
+
+/** Result 用の分岐 (`.ok` / `.err`) */
+type ResultCases<I, R, Remaining> = {
+  /**
+   * Success なら handler に値を渡す
+   *
+   * パターンを渡すと、値がそのパターンに一致するときだけ呼ぶ (handler は絞り込んだ値を受け取る)
+   */
+  ok<Out>(
+    handler: ((value: OkValue<I>) => Out) &
+      Reachable<Remaining, OkPattern<Wildcard>>,
+  ): Match<I, R | Out, ExcludeMatched<Remaining, OkPattern<Wildcard>>>;
+  ok<const Pat extends Pattern<OkValue<I>>, Out>(
+    pattern: Pat & Reachable<Remaining, OkPattern<Pat>>,
+    handler: (value: Handled<OkValue<I>, Pat>) => Out,
+  ): Match<I, R | Out, ExcludeMatched<Remaining, OkPattern<Pat>>>;
+
+  /**
+   * Failure なら handler にエラーを渡す
+   *
+   * パターンを渡すと、エラーがそのパターンに一致するときだけ呼ぶ (handler は絞り込んだエラーを受け取る)
+   */
+  err<Out>(
+    handler: ((error: ErrValue<I>) => Out) &
+      Reachable<Remaining, ErrPattern<Wildcard>>,
+  ): Match<I, R | Out, ExcludeMatched<Remaining, ErrPattern<Wildcard>>>;
+  err<const Pat extends Pattern<ErrValue<I>>, Out>(
+    pattern: Pat & Reachable<Remaining, ErrPattern<Pat>>,
+    handler: (error: Handled<ErrValue<I>, Pat>) => Out,
+  ): Match<I, R | Out, ExcludeMatched<Remaining, ErrPattern<Pat>>>;
 };
 
 // ----------------------------------------------------------------------------
@@ -365,14 +456,49 @@ type State =
 
 const NOT_MATCHED: State = Object.freeze({ matched: false });
 
+type Handler = (v: unknown) => unknown;
+
+/** `.ok` / `.err` の引数 (handler だけ、または pattern と handler) を分ける */
+const caseArgs = (
+  args: readonly [Handler] | readonly [unknown, Handler],
+): readonly [unknown, Handler] =>
+  args.length === 1 ? [wildcard, args[0]] : args;
+
 const builder = (input: unknown, state: State) => {
+  /**
+   * パターンに一致したら handler を呼ぶ
+   * (select がなければ handler には `unwrap(input)` を渡す)
+   */
+  const on = (
+    pattern: unknown,
+    handler: Handler,
+    unwrap: (input: unknown) => unknown,
+  ) => {
+    if (state.matched) return self;
+    const hit = matchPattern(pattern, input);
+    if (hit === undefined) return self;
+    const output = handler(hit.length > 0 ? hit[0] : unwrap(input));
+    return builder(input, Object.freeze({ matched: true, output }));
+  };
+
   const self = Object.freeze({
-    with(pattern: unknown, handler: (v: unknown) => unknown) {
-      if (state.matched) return self;
-      const hit = matchPattern(pattern, input);
-      if (hit === undefined) return self;
-      const output = handler(hit.length > 0 ? hit[0] : input);
-      return builder(input, Object.freeze({ matched: true, output }));
+    with: (pattern: unknown, handler: Handler) =>
+      on(pattern, handler, (v) => v),
+    ok: (...args: readonly [Handler] | readonly [unknown, Handler]) => {
+      const [pattern, handler] = caseArgs(args);
+      return on(
+        { type: "Success", value: pattern },
+        handler,
+        (v) => (v as Success<unknown>).value,
+      );
+    },
+    err: (...args: readonly [Handler] | readonly [unknown, Handler]) => {
+      const [pattern, handler] = caseArgs(args);
+      return on(
+        { type: "Failure", error: pattern },
+        handler,
+        (v) => (v as Failure<unknown>).error,
+      );
     },
     exhaustive() {
       if (state.matched) return state.output;

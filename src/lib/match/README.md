@@ -22,6 +22,30 @@ const status = match(findUser(id)) // Result<User, NotFoundError | ForbiddenErro
 
 戻り値の型は、すべての handler の戻り値の union です。
 
+## Result の分岐 (`.ok` / `.err`)
+
+入力に lib/rslt の `Result` が含まれるときだけ、`.ok` / `.err` が使えます。handler は Success の**値** / Failure の**エラー**を直接受け取ります。
+
+```typescript
+const status = match(findUser(id)) // Result<User, NotFoundError | ForbiddenError>
+  .ok({ role: "admin" }, (admin) => json(admin, 201)) // 値がパターンに一致するときだけ
+  .ok((user) => json(user, 200))
+  .err(P.instanceOf(NotFoundError), () => json(null, 404))
+  .err(P.instanceOf(ForbiddenError), () => json(null, 403))
+  .exhaustive();
+```
+
+| | |
+| --- | --- |
+| `.ok(handler)` | Success なら値を渡す (`.with({ type: "Success" }, ...)` と同じ判定) |
+| `.ok(pattern, handler)` | Success で、値が pattern に一致するときだけ呼ぶ。handler は絞り込んだ値 (`P.select()` があればその値) を受け取る |
+| `.err(handler)` / `.err(pattern, handler)` | Failure について同じ |
+
+- `.with` と混ぜて書けます。`Result<T, E> | null` のような union なら、残りの `null` は `.with(null, ...)` で受けます
+- Result 以外の入力では `.ok` / `.err` は型に存在しません (型をごまかして渡しても、一致せずに次の分岐へ進むだけです)
+- `ok(1)` の型 `Result<number, never>` のように、存在しえない側 (`Failure<never>` / `Success<never>`) の分岐は書かなくても網羅になります
+- `.ok` / `.err` はビルダーのメソッドなので、`P.union` やオブジェクトの中では使えません。そこでは `{ type: "Success", value: ... }` と書いてください
+
 ## パターン
 
 | パターン | 一致する条件 | handler が受け取る型 |
@@ -91,4 +115,4 @@ match(r)
 
 持っていないもの: `.otherwise` / `.when` / `.run` / `.returnType` / `P.number` などその他の P / `P.not` / `P.optional` / 配列・タプルのパターン / 名前付き select / 複数パターンの `.with` / `isMatching`
 
-ts-pattern にないもの: 到達しない分岐の検出
+ts-pattern にないもの: 到達しない分岐の検出 / Result 用の `.ok` / `.err`

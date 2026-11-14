@@ -465,3 +465,192 @@ describe("到達しない分岐", () => {
     expect([f("a"), f("b")]).toEqual([1, 2]);
   });
 });
+
+describe(".ok / .err (Result)", () => {
+  type User = { name: string; role: "admin" | "member" };
+  const r = (
+    v: User | NotFound | Forbidden,
+  ): Result<User, NotFound | Forbidden> =>
+    v instanceof Error ? err(v) : ok(v);
+
+  it("handler だけ渡すと、Success の値 / Failure のエラーを受け取る", () => {
+    const f = (x: Result<User, NotFound | Forbidden>) =>
+      match(x)
+        .ok((user) => {
+          assertType<Equal<typeof user, User>>();
+          return user.name;
+        })
+        .err((e) => {
+          assertType<Equal<typeof e, NotFound | Forbidden>>();
+          return e.kind;
+        })
+        .exhaustive();
+    expect(f(r({ name: "a", role: "admin" }))).toBe("a");
+    expect(f(r(new NotFound()))).toBe("NotFound");
+  });
+
+  it("パターンを渡すと、中身で分岐できる", () => {
+    const toStatus = (x: Result<User, NotFound | Forbidden>) =>
+      match(x)
+        .ok({ role: "admin" }, (user) => {
+          assertType<Equal<(typeof user)["role"], "admin">>();
+          return 201;
+        })
+        .ok(() => 200)
+        .err(P.instanceOf(NotFound), (e) => {
+          assertType<Equal<typeof e, NotFound>>();
+          return 404;
+        })
+        .err(P.instanceOf(Forbidden), () => 403)
+        .exhaustive();
+    expect([
+      toStatus(r({ name: "a", role: "admin" })),
+      toStatus(r({ name: "b", role: "member" })),
+      toStatus(r(new NotFound())),
+      toStatus(r(new Forbidden())),
+    ]).toEqual([201, 200, 404, 403]);
+  });
+
+  it("P.select() や P.union と組み合わせられる", () => {
+    const f = (x: Result<User, NotFound | Forbidden>) =>
+      match(x)
+        .ok({ name: P.select() }, (name) => {
+          assertType<Equal<typeof name, string>>();
+          return name;
+        })
+        .err(
+          P.union(P.instanceOf(NotFound), P.instanceOf(Forbidden)),
+          () => "x",
+        )
+        .exhaustive();
+    expect([
+      f(r({ name: "a", role: "member" })),
+      f(r(new Forbidden())),
+    ]).toEqual(["a", "x"]);
+  });
+
+  it(".with と混ぜて書ける", () => {
+    const f = (x: Result<number, string>) =>
+      match(x)
+        .with({ type: "Success", value: 0 }, () => "zero")
+        .ok((n) => `n:${n}`)
+        .err((e) => `e:${e}`)
+        .exhaustive();
+    expect([f(ok(0)), f(ok(1)), f(err("x"))]).toEqual(["zero", "n:1", "e:x"]);
+  });
+
+  it("Result とほかの型の union なら、残りは .with で受ける", () => {
+    const f = (x: Result<number, string> | null) =>
+      match(x)
+        .ok((n) => n)
+        .err(() => -1)
+        .with(null, () => 0)
+        .exhaustive();
+    expect([f(ok(5)), f(err("x")), f(null)]).toEqual([5, -1, 0]);
+
+    const _check = (x: Result<number, string> | null) =>
+      match(x)
+        .ok((n) => n)
+        .err(() => -1)
+        // @ts-expect-error null の分岐がない
+        .exhaustive();
+  });
+
+  it("書き忘れると型エラーになる", () => {
+    const _noErr = (x: Result<number, string>) =>
+      match(x)
+        .ok((n) => n)
+        // @ts-expect-error err の分岐がない
+        .exhaustive();
+
+    const _missingClass = (x: Result<User, NotFound | Forbidden>) =>
+      match(x)
+        .ok(() => 200)
+        .err(P.instanceOf(NotFound), () => 404)
+        // @ts-expect-error Forbidden の分岐がない
+        .exhaustive();
+
+    const _partialOk = (x: Result<User, NotFound | Forbidden>) =>
+      match(x)
+        .ok({ role: "admin" }, () => 201)
+        .err(() => 400)
+        // @ts-expect-error member の Success が残る
+        .exhaustive();
+  });
+
+  it("到達しない分岐は型エラーになる", () => {
+    const _dupOk = (x: Result<number, string>) =>
+      match(x)
+        .ok(() => 1)
+        // @ts-expect-error Success はすでに一致済み
+        .ok(() => 2)
+        .err(() => 3);
+
+    const _dupErr = (x: Result<number, NotFound | Forbidden>) =>
+      match(x)
+        .ok(() => 1)
+        .err(() => 2)
+        // @ts-expect-error Failure はすでに一致済み
+        .err(P.instanceOf(NotFound), () => 3);
+  });
+
+  it("Result 以外では .ok / .err は使えない", () => {
+    const _check = (x: string | null) => {
+      // @ts-expect-error string | null に .ok はない
+      match(x).ok(() => 1);
+      // @ts-expect-error string | null に .err はない
+      match(x).err(() => 1);
+    };
+  });
+
+  it("型をごまかして Result 以外を渡すと、一致せずに NonExhaustiveError になる", () => {
+    const f = (x: Result<number, string>) =>
+      match(x)
+        .ok((n) => n)
+        .err(() => -1)
+        .exhaustive();
+    expect(() => f("oops" as unknown as Result<number, string>)).toThrow(
+      NonExhaustiveError,
+    );
+  });
+
+  it("値のない ok() も Success として一致する", () => {
+    const x: Result<void, string> = ok();
+    const out = match(x)
+      .ok(() => "done")
+      .err((e) => e)
+      .exhaustive();
+    expect(out).toBe("done");
+  });
+});
+
+describe("存在しえない Result のメンバー", () => {
+  it("Result<T, never> は .ok だけで網羅になる", () => {
+    const out = match(ok(1))
+      .ok((n) => n + 1)
+      .exhaustive();
+    expect(out).toBe(2);
+  });
+
+  it("Result<never, E> は .err だけで網羅になる", () => {
+    const out = match(err("x"))
+      .err((e) => e)
+      .exhaustive();
+    expect(out).toBe("x");
+  });
+
+  it("型パラメータのままの Result でも網羅性を判定できる", () => {
+    const f = <T, E>(x: Result<T, E>) =>
+      match(x)
+        .ok(() => "ok")
+        .err(() => "err")
+        .exhaustive();
+    expect([f(ok(1)), f(err(2))]).toEqual(["ok", "err"]);
+
+    const _check = <T, E>(x: Result<T, E>) =>
+      match(x)
+        .ok(() => "ok")
+        // @ts-expect-error err の分岐がない
+        .exhaustive();
+  });
+});
