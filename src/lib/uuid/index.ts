@@ -1,4 +1,5 @@
-import { err, ok, Result } from "../result/index.js";
+import * as rslt from "../rslt/index.js";
+import { err, ok, type Result } from "../rslt/index.js";
 
 /**
  * Web Crypto API を使用した UUID v4 生成
@@ -35,14 +36,14 @@ export const uuidv4 = (): string => {
  * - 出力はURLセーフな 22 文字
  * - 入力はUUID v4 前提だが、16バイトのUUIDであれば一般に動作
  */
-export const toShortUuid = (uuid: string): Result.Result<string, Error> =>
-  Result.map(uuidToBytes(uuid), base64UrlEncode);
+export const toShortUuid = (uuid: string): Result<string, Error> =>
+  rslt.map(uuidToBytes(uuid), base64UrlEncode);
 
 /**
  * Base64URLで短縮されたUUID文字列(22文字)を通常のUUID表記に復元する
  */
-export const fromShortUuid = (short: string): Result.Result<string, Error> =>
-  Result.andThen(base64UrlDecode(short), bytesToUuid);
+export const fromShortUuid = (short: string): Result<string, Error> =>
+  rslt.andThen(base64UrlDecode(short), bytesToUuid);
 
 // ----------------------------------------------------------------------------
 // Internal Utils
@@ -50,7 +51,7 @@ export const fromShortUuid = (short: string): Result.Result<string, Error> =>
 const uuidRegex =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
-const uuidToBytes = (uuid: string): Result.Result<Uint8Array, Error> => {
+const uuidToBytes = (uuid: string): Result<Uint8Array, Error> => {
   if (!uuidRegex.test(uuid)) {
     return err(new Error(`Invalid UUID format: ${uuid}`));
   }
@@ -64,7 +65,7 @@ const uuidToBytes = (uuid: string): Result.Result<Uint8Array, Error> => {
   return ok(bytes);
 };
 
-const bytesToUuid = (bytes: Uint8Array): Result.Result<string, Error> => {
+const bytesToUuid = (bytes: Uint8Array): Result<string, Error> => {
   if (bytes.length !== 16) {
     return err(new Error(`Invalid byte length for UUID: ${bytes.length}`));
   }
@@ -91,7 +92,7 @@ const base64UrlEncode = (bytes: Uint8Array): string => {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 };
 
-const base64UrlDecode = (short: string): Result.Result<Uint8Array, Error> => {
+const base64UrlDecode = (short: string): Result<Uint8Array, Error> => {
   if (!/^[A-Za-z0-9_-]{22,24}$/.test(short)) {
     return err(new Error(`Invalid short UUID format: ${short}`));
   }

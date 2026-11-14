@@ -11,7 +11,7 @@ NWU のアプリケーションに使用する TypeScript ユーティリティ�
 - **Runtime**: Bun
 - **Language**: TypeScript
 - **主要ライブラリ**:
-  - `lib/result` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
+  - `lib/rslt` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
   - `zod`: スキーマバリデーション
   - `ts-pattern`: パターンマッチング
 - **Linter/Formatter**: Biome
@@ -24,7 +24,7 @@ src/
 ├── error.ts                  # カスタムエラークラス定義
 ├── interface.ts              # 共通インターフェース定義
 ├── lib/
-│   ├── result/               # Result 型ライブラリ
+│   ├── rslt/                 # Result 型ライブラリ
 │   │   ├── index.ts
 │   │   └── result.ts
 │   ├── uuid/                 # UUID 生成・変換ユーティリティ
@@ -65,28 +65,28 @@ AppError (基底クラス)
 
 #### Auth
 認証インターフェース。`Request` を受け取り、ユーザー識別子（通常はメールアドレス）を返します。
-- 戻り値: `Result.ResultAsync<User, AuthError>`
+- 戻り値: `ResultAsync<User, AuthError>`
 
 ### ライブラリ機能
 
-#### Result ライブラリ (lib/result/)
+#### Result ライブラリ (lib/rslt/)
 
-外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数にして tree-shaking を効かせている。`import { err, flow, flowAsync, isErr, isOk, ok, Result } from "@nw-union/nw-utils/lib/result"` で使う (それ以外の関数は `Result.map` のように使う)。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `import * as rslt from "@nw-union/nw-utils/lib/rslt"` して `rslt.map` / `rslt.try` のように使う。
 
-- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
-- 生成: `ok`, `err`, `Result.try` (同期), `Result.tryAsync` (非同期)
+- 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
+- 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
-- 変換: `Result.map`, `Result.mapError`, `Result.andThen`, `Result.orElse` (すべて同期・data-first)
+- 変換: `rslt.map`, `rslt.mapError`, `rslt.andThen`, `rslt.orElse` (すべて同期・data-first)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
-- 集約: `Result.sequence` (最初の Failure), `Result.collect` (全エラー), `Result.sequenceAsync`, `Result.collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
+- 集約: `sequence` (最初の Failure), `collect` (全エラー), `sequenceAsync`, `collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:
 
 ```typescript
-const f = async (id: string): Result.ResultAsync<User, AppError> => {
+const f = async (id: string): ResultAsync<User, AppError> => {
   const valid = validateId(id);
   if (isErr(valid)) return valid;
-  return Result.tryAsync(() => fetchUser(valid.value), toAppError);
+  return rslt.tryAsync(() => fetchUser(valid.value), toAppError);
 };
 ```
 
@@ -107,7 +107,7 @@ Value Object パターンを簡単に実装するためのヘルパー関数を�
 
 **主な関数**:
 - `newType<T>(schema, type)`: Zod スキーマから型安全な VO 生成関数を作成
-  - 入力値をバリデーションし、`Result.Result<T, ValidationError>` を返す
+  - 入力値をバリデーションし、`Result<T, ValidationError>` を返す
   - バリデーションエラーは自動的に `ValidationError` に変換される
 
 **使用例**:
@@ -138,7 +138,7 @@ Cloudflare Access による JWT 認証を実装したアダプター。
 **使用方法**:
 ```typescript
 const auth = newCfAuth("https://your-team.cloudflareaccess.com", "your-aud");
-const result = await auth.auth(request); // Result.Result<User, AuthError>
+const result = await auth.auth(request); // Result<User, AuthError>
 ```
 
 内部実装:
@@ -154,7 +154,7 @@ const result = await auth.auth(request); // Result.Result<User, AuthError>
 以下のサブパス export が利用可能です:
 
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
-- `@nw-union/nw-utils/lib/result` - Result 型
+- `@nw-union/nw-utils/lib/rslt` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
 - `@nw-union/nw-utils/adapter/auth-mock` - モック認証
@@ -165,12 +165,12 @@ const result = await auth.auth(request); // Result.Result<User, AuthError>
 ```bash
 bun run build        # TypeScript のビルド
 bun run check        # Biome による lint と format
-bun run gen          # lib/result の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
+bun run gen          # lib/rslt の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
 ```
 
 ## 設計原則
 
-1. **関数型プログラミング**: `lib/result` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
+1. **関数型プログラミング**: `lib/rslt` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
 2. **型安全性**: TypeScript の型システムを最大限活用し、ランタイムエラーを最小化
 3. **ランタイム非依存**: Cloudflare Workers など複数のランタイムで動作するよう、標準 Web API を優先使用
 4. **パターンマッチング**: `ts-pattern` を活用した宣言的なコード記述
@@ -178,7 +178,7 @@ bun run gen          # lib/result の flow / flowAsync のオーバーロード�
 
 ## 注意事項
 
-- すべての非同期エラーハンドリングは `Result.ResultAsync` を使用すること
+- すべての非同期エラーハンドリングは `ResultAsync` を使用すること
 - カスタムエラーを追加する場合は `error.ts` の階層に従うこと
 - 新しいアダプターは `interface.ts` で定義されたインターフェースを実装すること
 - Cloudflare Workers 環境では Node.js 固有の API を使用しないこと

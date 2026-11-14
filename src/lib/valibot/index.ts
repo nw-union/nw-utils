@@ -7,7 +7,7 @@ import {
   ValiError,
 } from "valibot";
 import { ValidationError } from "../../error.js";
-import { err, ok, type Result } from "../result/index.js";
+import { err, ok, type Result } from "../rslt/index.js";
 
 /**
  * newType は, ValueObjectを生成関数を作成するためのヘルパー関数
@@ -30,10 +30,7 @@ import { err, ok, type Result } from "../result/index.js";
  */
 export const newType =
   <T extends GenericSchema>(schema: T, type: string) =>
-  (
-    src: unknown,
-    name?: string,
-  ): Result.Result<InferOutput<T>, ValidationError> =>
+  (src: unknown, name?: string): Result<InferOutput<T>, ValidationError> =>
     match(safeParse(schema, src))
       .with({ success: true }, ({ output }) => ok(output))
       .with({ success: false }, ({ issues }) =>
@@ -68,7 +65,7 @@ export const newVoOrNone =
   (
     src: unknown,
     name?: string,
-  ): Result.Result<InferOutput<T> | null, ValidationError> =>
+  ): Result<InferOutput<T> | null, ValidationError> =>
     src === "" ? ok(null) : newType(schema, type)(src, name);
 
 const newValidationError = (

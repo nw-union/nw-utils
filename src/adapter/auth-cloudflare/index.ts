@@ -1,6 +1,14 @@
 import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
-import { err, flowAsync, isErr, ok, Result } from "../../lib/result/index.js";
+import * as rslt from "../../lib/rslt/index.js";
+import {
+  err,
+  flowAsync,
+  isErr,
+  ok,
+  type Result,
+  type ResultAsync,
+} from "../../lib/rslt/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 // JWKS型定義
@@ -62,7 +70,7 @@ const base64UrlDecode = (str: string): string => {
 // JWT をデコード
 const decodeJWT = (
   token: string,
-): Result.Result<
+): Result<
   { header: JWTHeader; payload: JWTPayload; signature: string },
   AuthError
 > => {
@@ -172,7 +180,7 @@ const validatePayload = (
   payload: JWTPayload,
   issuer: string,
   audience?: string,
-): Result.Result<void, AuthError> => {
+): Result<void, AuthError> => {
   const now = Math.floor(Date.now() / 1000);
 
   // exp (有効期限) チェック
@@ -229,8 +237,8 @@ const validatePayload = (
  */
 const tokenVerify =
   (jwksUrl: string, issuer: string, audience?: string) =>
-  (token: string): Result.ResultAsync<User, AuthError> =>
-    Result.tryAsync(
+  (token: string): ResultAsync<User, AuthError> =>
+    rslt.tryAsync(
       async () => {
         // JWT をデコード
         const decoded = decodeJWT(token);
@@ -292,7 +300,7 @@ const AUTH_COOKIE_KEY = "CF_Authorization";
  * header で取得できればその値を, できなければ, Cookie から取得を試みる
  * どちらでも取得できなければエラーを返す
  */
-const getToken = (req: Request): Result.Result<string, AuthError> =>
-  Result.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
+const getToken = (req: Request): Result<string, AuthError> =>
+  rslt.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
     getTokenFromCookie(req, AUTH_COOKIE_KEY),
   );

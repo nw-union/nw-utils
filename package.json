@@ -12,6 +12,7 @@
   },
   "type": "module",
   "files": ["dist"],
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,9 +22,9 @@
       "types": "./dist/lib/uuid/index.d.ts",
       "default": "./dist/lib/uuid/index.js"
     },
-    "./lib/result": {
-      "types": "./dist/lib/result/index.d.ts",
-      "default": "./dist/lib/result/index.js"
+    "./lib/rslt": {
+      "types": "./dist/lib/rslt/index.d.ts",
+      "default": "./dist/lib/rslt/index.js"
     },
     "./lib/zod": {
       "types": "./dist/lib/zod/index.d.ts",

@@ -66,6 +66,7 @@ const try_ = <T, E>(
   }
 };
 
+// try は予約語なので、別名で定義して export 時に名前を付ける (rslt.try として使う)
 export { try_ as try };
 
 /**
@@ -143,7 +144,7 @@ const isResult = (x: unknown): x is Result<unknown, unknown> => {
  *
  * @example
  * ```typescript
- * const user = Result.flow(ok(req), getToken, tokenToUser);
+ * const user = flow(ok(req), getToken, tokenToUser);
  * // getToken: (req: Request) => Result<string, AuthError>
  * // tokenToUser: (token: string) => User
  * // user: Result<User, AuthError>
@@ -299,7 +300,7 @@ export function flow(
  *
  * @example
  * ```typescript
- * const user = await Result.flowAsync(ok(req), getToken, verifyToken, toUser);
+ * const user = await flowAsync(ok(req), getToken, verifyToken, toUser);
  * // verifyToken: (token: string) => ResultAsync<Payload, AuthError>
  * ```
  */
@@ -548,8 +549,8 @@ const awaitAll = async (
  *
  * @example
  * ```typescript
- * Result.sequence([ok(1), ok("a")]); // ok([1, "a"])  型: Result<[number, string], never>
- * Result.sequence({ id: newId(x), mail: newEmail(y) }); // Result<{ id: Id; mail: Email }, ValidationError>
+ * sequence([ok(1), ok("a")]); // ok([1, "a"])  型: Result<[number, string], never>
+ * sequence({ id: newId(x), mail: newEmail(y) }); // Result<{ id: Id; mail: Email }, ValidationError>
  * ```
  */
 export const sequence = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
@@ -569,7 +570,7 @@ export const sequence = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
  * @example
  * ```typescript
  * // フォームの全項目を検証し、エラーをまとめて返す
- * Result.collect({ id: newId(x), mail: newEmail(y) });
+ * collect({ id: newId(x), mail: newEmail(y) });
  * // Result<{ id: Id; mail: Email }, ValidationError[]>
  * ```
  */
@@ -589,7 +590,7 @@ export const collect = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
  *
  * @example
  * ```typescript
- * const r = await Result.sequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
+ * const r = await sequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
  * // Result<{ user: User; posts: Post[] }, ApiError>
  * ```
  */
@@ -614,7 +615,7 @@ export const sequenceAsync = async <
  *
  * @example
  * ```typescript
- * const r = await Result.collectAsync([saveA(a), saveB(b)]);
+ * const r = await collectAsync([saveA(a), saveB(b)]);
  * // Result<[A, B], DbError[]>
  * ```
  */

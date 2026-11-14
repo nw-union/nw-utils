@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { isErr, type Result } from "../result/index.js";
+import { isErr, type Result } from "../rslt/index.js";
 import { fromShortUuid, toShortUuid, uuidv4 } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
-const unwrap = <T, E>(r: Result.Result<T, E>): T => {
+const unwrap = <T, E>(r: Result<T, E>): T => {
   if (isErr(r))
     throw new Error(`expected Success but got Failure: ${String(r.error)}`);
   return r.value;

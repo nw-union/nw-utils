@@ -1,5 +1,5 @@
 import type { AppError, AuthError } from "./error.js";
-import { type Result } from "./lib/result/index.js";
+import type { ResultAsync } from "./lib/rslt/index.js";
 
 // ----------------------------------------------
 // Logger ロガー
@@ -20,5 +20,5 @@ export interface User {
 
 // Auth 認証
 export interface Auth {
-  auth(req: Request): Result.ResultAsync<User, AuthError>;
+  auth(req: Request): ResultAsync<User, AuthError>;
 }
