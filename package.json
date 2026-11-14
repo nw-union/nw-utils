@@ -31,9 +31,9 @@
       "types": "./dist/lib/zod/index.d.ts",
       "default": "./dist/lib/zod/index.js"
     },
-    "./lib/vldt": {
-      "types": "./dist/lib/vldt/index.d.ts",
-      "default": "./dist/lib/vldt/index.js"
+    "./lib/vo": {
+      "types": "./dist/lib/vo/index.d.ts",
+      "default": "./dist/lib/vo/index.js"
     },
     "./lib/valibot": {
       "types": "./dist/lib/valibot/index.d.ts",

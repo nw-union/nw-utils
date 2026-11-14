@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { newType, v } from "@nw-union/nw-utils/lib/vldt";
+ * import { newType, v } from "@nw-union/nw-utils/lib/vo";
  *
  * const email = v.pipe(v.string(), v.email(), v.brand("Email"));
  * export type Email = v.InferOutput<typeof email>;
