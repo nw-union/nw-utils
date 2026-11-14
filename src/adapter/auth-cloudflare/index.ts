@@ -2,12 +2,12 @@ import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
 import {
   err,
-  flowAsync,
   isErr,
   ok,
   type Result,
   type ResultAsync,
   rslt,
+  stepAsync,
 } from "../../lib/rslt/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
@@ -47,7 +47,7 @@ interface JWTPayload {
 
 export const newAuthCloudflare = (teamDomain: string, aud?: string): Auth => ({
   auth: (req: Request) =>
-    flowAsync(
+    stepAsync(
       ok(req),
       // step.1 request からトークンを取得
       getToken,

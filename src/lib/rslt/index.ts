@@ -5,9 +5,9 @@
  * - すべての関数を個別に export しているので、使った関数だけがバンドルに入る
  *   (`rslt.map` のように `rslt` 経由で使っても同じ)
  * - 変換関数 (`rslt.map(fn)` など) は「Result を受け取る関数」を返す (data-last)。`rslt.pipe` に並べて使う。すべて同期
- * - 非同期は `flowAsync` か async/await で扱う
+ * - 非同期は `stepAsync` か async/await で扱う
  *
- * よく使うもの (`ok`, `err`, `isErr`, `flow`, `flowAsync`, `through`, `throughAsync`, `tee`, `sequence`, `collect`, 型) は名前で import し、
+ * よく使うもの (`ok`, `err`, `isErr`, `step`, `stepAsync`, `through`, `throughAsync`, `tee`, `sequence`, `collect`, 型) は名前で import し、
  * それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う
  *
  * @example

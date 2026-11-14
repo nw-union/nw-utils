@@ -1,11 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { match } from "ts-pattern";
+import { match, P } from "ts-pattern";
 import {
   collect,
   collectAsync,
   err,
-  flow,
-  flowAsync,
   isErr,
   ok,
   type Result,
@@ -13,6 +11,8 @@ import {
   rslt,
   sequence,
   sequenceAsync,
+  step,
+  stepAsync,
   tee,
   through,
   throughAsync,
@@ -56,6 +56,75 @@ describe("Result の値", () => {
         .exhaustive();
     expect(f(ok(1))).toBe("ok:1");
     expect(f(err("e"))).toBe("err:e");
+  });
+});
+
+describe("ts-pattern との組み合わせ", () => {
+  class NotFound extends Error {
+    readonly kind = "NotFound";
+  }
+  class Forbidden extends Error {
+    readonly kind = "Forbidden";
+  }
+  const find = (id: number): Result<{ name: string }, NotFound | Forbidden> =>
+    id === 1
+      ? ok({ name: "a" })
+      : id === 2
+        ? err(new Forbidden("forbidden"))
+        : err(new NotFound("not found"));
+
+  it("Success / Failure の片方を書き忘れると exhaustive() が型エラーになる", () => {
+    const _check = (r: Result<number, string>) =>
+      match(r)
+        .with({ type: "Success" }, ({ value }) => value)
+        // @ts-expect-error Failure の分岐がない
+        .exhaustive();
+  });
+
+  it("エラーのクラスごとに分岐できる (P.instanceOf)", () => {
+    const toStatus = (r: Result<{ name: string }, NotFound | Forbidden>) =>
+      match(r)
+        .with({ type: "Success" }, () => 200)
+        .with({ type: "Failure", error: P.instanceOf(NotFound) }, () => 404)
+        .with({ type: "Failure", error: P.instanceOf(Forbidden) }, () => 403)
+        .exhaustive();
+    expect([toStatus(find(1)), toStatus(find(2)), toStatus(find(3))]).toEqual([
+      200, 403, 404,
+    ]);
+  });
+
+  it("エラーのクラスを 1 つ書き忘れると exhaustive() が型エラーになる", () => {
+    const _check = (r: Result<{ name: string }, NotFound | Forbidden>) =>
+      match(r)
+        .with({ type: "Success" }, () => 200)
+        .with({ type: "Failure", error: P.instanceOf(NotFound) }, () => 404)
+        // @ts-expect-error Forbidden の分岐がない
+        .exhaustive();
+  });
+
+  it("成功値の中身でも分岐でき、P.select で取り出せる", () => {
+    const greet = (r: Result<{ name: string }, NotFound | Forbidden>) =>
+      match(r)
+        .with({ type: "Success", value: { name: "a" } }, () => "admin")
+        .with({ type: "Success", value: { name: P.select() } }, (name) => name)
+        .with({ type: "Failure" }, ({ error }) => error.message)
+        .exhaustive();
+    expect(greet(find(1))).toBe("admin");
+    expect(greet(ok({ name: "b" }))).toBe("b");
+    expect(greet(find(3))).toBe("not found");
+  });
+
+  it("rslt.pipe の最後に置いて、Result を値に変えられる", () => {
+    const message = rslt.pipe(
+      find(1),
+      rslt.map((u) => u.name.toUpperCase()),
+      (r) =>
+        match(r)
+          .with({ type: "Success" }, ({ value }) => `Hello, ${value}`)
+          .with({ type: "Failure" }, ({ error }) => `Error: ${error.message}`)
+          .exhaustive(),
+    );
+    expect(message).toBe("Hello, A");
   });
 });
 
@@ -245,7 +314,7 @@ describe("try / tryAsync", () => {
 });
 
 // ----------------------------------------------------------------------------
-// flow / flowAsync
+// step / stepAsync
 // ----------------------------------------------------------------------------
 
 type Equal<X, Y> =
@@ -268,21 +337,21 @@ const tokenToUser = (mail: string): User => ({ mail });
 const saveUser = (u: User): Result<number, DbError> =>
   u.mail.includes("@") ? ok(1) : err(new DbError("db"));
 
-describe("flow", () => {
+describe("step", () => {
   it("Result を返す関数と値を返す関数を混ぜてつなげられる", () => {
-    const r = flow(ok({ token: "a@b" }), getToken, tokenToUser, saveUser);
+    const r = step(ok({ token: "a@b" }), getToken, tokenToUser, saveUser);
     assertType<Equal<typeof r, Result<number, AuthError | DbError>>>();
     expect(r).toEqual(ok(1));
   });
 
   it("値だけを返す関数のエラー型は増えない", () => {
-    const r = flow(ok({ token: "a@b" }), getToken, tokenToUser);
+    const r = step(ok({ token: "a@b" }), getToken, tokenToUser);
     assertType<Equal<typeof r, Result<User, AuthError>>>();
   });
 
   it("途中で Failure になったら残りの関数は呼ばない", () => {
     const calls: string[] = [];
-    const r = flow(
+    const r = step(
       ok({}),
       getToken,
       (t) => {
@@ -300,7 +369,7 @@ describe("flow", () => {
 
   it("最初から Failure なら関数は呼ばない", () => {
     let called = false;
-    const r = flow(err("ng"), () => {
+    const r = step(err("ng"), () => {
       called = true;
       return 1;
     });
@@ -309,44 +378,44 @@ describe("flow", () => {
   });
 
   it("Result と同じ形の object は Result として扱う (型も同じ扱い)", () => {
-    const r = flow(ok(1), () => ({ type: "Failure" as const, error: "data" }));
+    const r = step(ok(1), () => ({ type: "Failure" as const, error: "data" }));
     assertType<Equal<typeof r, Result<never, string>>>();
     expect(r).toEqual(err("data"));
   });
 
   it("JSON を経由して value が消えた ok() も Result として扱う", () => {
     const fromJson = JSON.parse(JSON.stringify(ok())); // { type: "Success" }
-    const r = flow(ok(1), () => fromJson);
+    const r = step(ok(1), () => fromJson);
     expect(isErr(r)).toBe(false);
     expect(!isErr(r) && r.value).toBeUndefined();
     // type 以外のキーを持つ場合は Result とみなさない
-    const other = flow(ok(1), () => ({ type: "Success", id: 1 }));
+    const other = step(ok(1), () => ({ type: "Success", id: 1 }));
     expect(other).toEqual(ok({ type: "Success", id: 1 }));
   });
 
   it("10 個までつなげられる", () => {
     const inc = (n: number) => n + 1;
-    const r = flow(ok(0), inc, inc, inc, inc, inc, inc, inc, inc, inc, inc);
+    const r = step(ok(0), inc, inc, inc, inc, inc, inc, inc, inc, inc, inc);
     expect(r).toEqual(ok(10));
   });
 
   it("一部だけ Promise を返す関数 (union) も渡せない (型エラー)", () => {
     // @ts-expect-error union の一部が Promise
-    flow(ok(1), (n: number) => (n > 0 ? n : Promise.resolve(n)));
+    step(ok(1), (n: number) => (n > 0 ? n : Promise.resolve(n)));
   });
 
   it("Promise を返す関数は渡せない (型エラー)", () => {
-    // @ts-expect-error 非同期関数は flowAsync を使う
-    flow(ok(1), async (n: number) => n);
+    // @ts-expect-error 非同期関数は stepAsync を使う
+    step(ok(1), async (n: number) => n);
   });
 });
 
-describe("flowAsync", () => {
+describe("stepAsync", () => {
   const verify = async (t: string): ResultAsync<string, AuthError> =>
     t.startsWith("valid") ? ok(t.slice(6)) : err(new AuthError("invalid"));
 
   it("同期・非同期の関数を混ぜてつなげられる", async () => {
-    const p = flowAsync(
+    const p = stepAsync(
       ok({ token: "valid:a@b" }),
       getToken,
       verify,
@@ -358,13 +427,13 @@ describe("flowAsync", () => {
   });
 
   it("ResultAsync から始められる", async () => {
-    const r = await flowAsync(verify("valid:x@y"), tokenToUser);
+    const r = await stepAsync(verify("valid:x@y"), tokenToUser);
     expect(r).toEqual(ok({ mail: "x@y" }));
   });
 
   it("途中で Failure になったら残りの関数は呼ばない", async () => {
     let called = false;
-    const r = await flowAsync(
+    const r = await stepAsync(
       ok({ token: "bad" }),
       getToken,
       verify,
@@ -378,13 +447,13 @@ describe("flowAsync", () => {
   });
 
   it("同期的に Failure で終わっても必ず Promise を返す", async () => {
-    const p = flowAsync(ok({}), getToken, verify);
+    const p = stepAsync(ok({}), getToken, verify);
     expect(p).toBeInstanceOf(Promise);
     expect(isErr(await p)).toBe(true);
   });
 
   it("関数が throw / reject した場合は Failure にせず reject する", async () => {
-    const p = flowAsync(ok(1), async () => {
+    const p = stepAsync(ok(1), async () => {
       throw new Error("boom");
     });
     await expect(p).rejects.toThrow("boom");
@@ -554,7 +623,7 @@ describe("through", () => {
 
   it("void を返す関数を挟んでも、元の値がそのまま次に渡る", () => {
     const logs: string[] = [];
-    const r = flow(
+    const r = step(
       ok({ token: "a@b" }),
       getToken,
       through((t) => {
@@ -568,7 +637,7 @@ describe("through", () => {
   });
 
   it("成功の Result を返したら元の値を渡し、Failure ならそこで止まる", () => {
-    const ok1 = flow(
+    const ok1 = step(
       ok({ token: "a@b" }),
       getToken,
       through(checkNotBanned),
@@ -578,7 +647,7 @@ describe("through", () => {
     expect(ok1).toEqual(ok({ mail: "a@b" }));
 
     let called = false;
-    const ng1 = flow(
+    const ng1 = step(
       ok({ token: "banned@b" }),
       getToken,
       through(checkNotBanned),
@@ -592,12 +661,12 @@ describe("through", () => {
   });
 
   it("through で増えるエラー型は fn が返す Failure の型だけ", () => {
-    const r = flow(
+    const r = step(
       ok(1),
       through((n: number) => (n > 0 ? ok() : err(new DbError("db")))),
     );
     assertType<Equal<typeof r, Result<number, DbError>>>();
-    const v = flow(
+    const v = step(
       ok(1),
       through((n: number) => n * 2),
     ); // 値を返しても捨てる
@@ -614,7 +683,7 @@ describe("through", () => {
 describe("tee", () => {
   it("元の値がそのまま次に渡り、fn の戻り値は捨てられる", () => {
     const seen: number[] = [];
-    const r = flow(
+    const r = step(
       ok(1),
       tee((n: number) => {
         seen.push(n);
@@ -627,7 +696,7 @@ describe("tee", () => {
   });
 
   it("fn が Failure を返しても無視して続行する", () => {
-    const r = flow(
+    const r = step(
       ok(1),
       tee(() => err("ignored")),
     );
@@ -635,7 +704,7 @@ describe("tee", () => {
   });
 
   it("fn が例外を投げても握りつぶして続行する", () => {
-    const r = flow(
+    const r = step(
       ok(1),
       tee(() => {
         throw new Error("boom");
@@ -645,7 +714,7 @@ describe("tee", () => {
   });
 
   it("非同期 fn の reject も握りつぶす", async () => {
-    const r = flow(
+    const r = step(
       ok(1),
       tee(async () => {
         throw new Error("boom");
@@ -657,7 +726,7 @@ describe("tee", () => {
 
   it("前段が Failure なら fn を呼ばない", () => {
     let called = false;
-    const r = flow(
+    const r = step(
       ng,
       tee(() => {
         called = true;
@@ -668,7 +737,7 @@ describe("tee", () => {
   });
 
   it("エラー型は増えない", () => {
-    const r: Result<number, string> = flow(
+    const r: Result<number, string> = step(
       ok1,
       tee(() => err(new Error("x"))),
     );
@@ -677,13 +746,13 @@ describe("tee", () => {
 });
 
 describe("throughAsync", () => {
-  it("flowAsync の中で非同期の処理を挟み、元の値を渡す", async () => {
+  it("stepAsync の中で非同期の処理を挟み、元の値を渡す", async () => {
     const saved: string[] = [];
     const save = async (t: string): ResultAsync<void, DbError> => {
       saved.push(t);
       return ok();
     };
-    const p = flowAsync(
+    const p = stepAsync(
       ok({ token: "a@b" }),
       getToken,
       throughAsync(save),
@@ -697,7 +766,7 @@ describe("throughAsync", () => {
   it("非同期の処理が Failure を返したらそこで止まる", async () => {
     const fail = async (_: string): ResultAsync<void, DbError> =>
       err(new DbError("db down"));
-    const r = await flowAsync(
+    const r = await stepAsync(
       ok({ token: "a@b" }),
       getToken,
       throughAsync(fail),
