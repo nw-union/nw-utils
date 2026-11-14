@@ -1,6 +1,6 @@
-import { Result } from "@praha/byethrow";
 import { match, P } from "ts-pattern";
 import { AuthError } from "../error.js";
+import { Result } from "../lib/result/index.js";
 
 // Header からトークンを取得
 export const getTokenFromHeader = (

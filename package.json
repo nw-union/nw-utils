@@ -20,6 +20,10 @@
       "types": "./dist/lib/uuid/index.d.ts",
       "default": "./dist/lib/uuid/index.js"
     },
+    "./lib/result": {
+      "types": "./dist/lib/result/index.d.ts",
+      "default": "./dist/lib/result/index.js"
+    },
     "./lib/zod": {
       "types": "./dist/lib/zod/index.d.ts",
       "default": "./dist/lib/zod/index.js"
@@ -54,7 +58,6 @@
     "url": "git+https://github.com/nw-union/nw-utils.git"
   },
   "dependencies": {
-    "@praha/byethrow": "^0.13.0",
     "ts-pattern": "^5.9.0",
     "valibot": "^1.3.1",
     "zod": "^4.3.6"

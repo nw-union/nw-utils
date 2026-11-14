@@ -1,4 +1,3 @@
-import { Result } from "@praha/byethrow";
 import { match } from "ts-pattern";
 import {
   type BaseIssue,
@@ -8,6 +7,7 @@ import {
   ValiError,
 } from "valibot";
 import { ValidationError } from "../../error.js";
+import { Result } from "../result/index.js";
 
 /**
  * newType は, ValueObjectを生成関数を作成するためのヘルパー関数

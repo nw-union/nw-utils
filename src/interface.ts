@@ -1,5 +1,5 @@
-import type { Result } from "@praha/byethrow";
 import type { AppError, AuthError } from "./error.js";
+import type { Result } from "./lib/result/index.js";
 
 // ----------------------------------------------
 // Logger ロガー

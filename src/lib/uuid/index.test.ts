@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Result } from "@praha/byethrow";
+import { Result } from "../result/index.js";
 import { fromShortUuid, toShortUuid, uuidv4 } from "./index.js";
 
 describe("uuidv4", () => {

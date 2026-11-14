@@ -1,6 +1,6 @@
-import { Result } from "@praha/byethrow";
 import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
+import { Result } from "../../lib/result/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 // JWKS型定義
@@ -38,15 +38,17 @@ interface JWTPayload {
 }
 
 export const newAuthCloudflare = (teamDomain: string, aud?: string): Auth => ({
-  auth: async (req: Request) =>
-    Result.pipe(
-      // step.1 request からトークンを取得
-      getToken(req),
-      // step.2 トークンを検証
-      Result.andThen(
-        tokenVerify(`${teamDomain}/cdn-cgi/access/certs`, teamDomain, aud),
-      ),
-    ),
+  auth: async (req: Request) => {
+    // step.1 request からトークンを取得
+    const token = getToken(req);
+    if (Result.isFailure(token)) return token;
+    // step.2 トークンを検証
+    return tokenVerify(
+      `${teamDomain}/cdn-cgi/access/certs`,
+      teamDomain,
+      aud,
+    )(token.value);
+  },
 });
 
 // Base64URL デコード
@@ -233,8 +235,8 @@ const validatePayload = (
 const tokenVerify =
   (jwksUrl: string, issuer: string, audience?: string) =>
   (token: string): Result.ResultAsync<User, AuthError> =>
-    Result.try({
-      try: async (): Promise<User> => {
+    Result.tryAsync(
+      async (): Promise<User> => {
         // JWT をデコード
         const decoded = decodeJWT(token);
         if (Result.isFailure(decoded)) {
@@ -284,8 +286,8 @@ const tokenVerify =
           mail: userEmail,
         };
       },
-      catch: (e) => new AuthError(`Invalid JWT token: ${(e as Error).message}`),
-    });
+      (e) => new AuthError(`Invalid JWT token: ${(e as Error).message}`),
+    );
 
 const AUTH_HEADER_KEY = "Cf-Access-Jwt-Assertion";
 const AUTH_COOKIE_KEY = "CF_Authorization";
@@ -296,7 +298,6 @@ const AUTH_COOKIE_KEY = "CF_Authorization";
  * どちらでも取得できなければエラーを返す
  */
 const getToken = (req: Request): Result.Result<string, AuthError> =>
-  Result.pipe(
-    getTokenFromHeader(req, AUTH_HEADER_KEY),
-    Result.orElse(() => getTokenFromCookie(req, AUTH_COOKIE_KEY)),
+  Result.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
+    getTokenFromCookie(req, AUTH_COOKIE_KEY),
   );

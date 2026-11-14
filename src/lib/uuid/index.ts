@@ -1,4 +1,4 @@
-import { Result } from "@praha/byethrow";
+import { Result } from "../result/index.js";
 
 /**
  * Web Crypto API を使用した UUID v4 生成
@@ -36,13 +36,13 @@ export const uuidv4 = (): string => {
  * - 入力はUUID v4 前提だが、16バイトのUUIDであれば一般に動作
  */
 export const toShortUuid = (uuid: string): Result.Result<string, Error> =>
-  Result.pipe(uuidToBytes(uuid), Result.map(base64UrlEncode));
+  Result.map(uuidToBytes(uuid), base64UrlEncode);
 
 /**
  * Base64URLで短縮されたUUID文字列(22文字)を通常のUUID表記に復元する
  */
 export const fromShortUuid = (short: string): Result.Result<string, Error> =>
-  Result.pipe(base64UrlDecode(short), Result.andThen(bytesToUuid));
+  Result.andThen(base64UrlDecode(short), bytesToUuid);
 
 // ----------------------------------------------------------------------------
 // Internal Utils

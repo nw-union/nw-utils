@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { Result } from "@praha/byethrow";
 import * as v from "valibot";
+import { Result } from "../result/index.js";
 import { newType, newVoOrNone } from "./index.js";
 
 const emailSchema = v.pipe(v.string(), v.email(), v.brand("Email"));
