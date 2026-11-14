@@ -135,8 +135,8 @@ const result = newEmail("test@example.com"); // Result<Email, ValidationError>
 
 - パーサーはすべて `Parser<I, O> = (input: I) => Result<O, Issue>` という純粋な関数。`Schema<O> = Parser<unknown, O>`
 - 部品は `v` 経由で使う。引数のないものは値、引数があるものは関数
-  - 値: `string` / `number` / `boolean`, `nonEmpty` / `email`, `integer`
-  - 関数: `minLength(n)` / `maxLength(n)` / `length(n)` / `regex(re)`, `minValue(n)` / `maxValue(n)`
+  - 値: `string` / `number` / `boolean`, `nonEmpty` / `email` / `uuidv4`, `integer`
+  - 関数: `minLength(n)` / `maxLength(n)` / `length(n)` / `regex(re)` / `startsWith(s)`, `minValue(n)` / `maxValue(n)`
   - 組み合わせ: `chain(p1, p2, ...)` (Kleisli 合成。最初の失敗で止まり、エラーは 1 件), `emptyAsNull(p)` (空文字列を `ok(null)` にする)
 - パーサーには brand を付けない。brand は `newVo` が付ける
 - 型: `Parser`, `Schema`, `Issue`, `InferOutput`, `Brand`, `InferVo`

@@ -134,6 +134,24 @@ export const email: Parser<string, string> = check(
   (v) => `Invalid email: Received ${show(v)}`,
 );
 
+// バージョンが 4、バリアントが RFC 4122 (8 / 9 / a / b) の UUID。大文字も許す
+const UUIDV4_REGEX =
+  /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i;
+
+/** UUID v4 の形式 (xxxxxxxx-xxxx-4xxx-[89ab]xxx-xxxxxxxxxxxx。大文字小文字は問わない) */
+export const uuidv4: Parser<string, string> = check(
+  (v) => UUIDV4_REGEX.test(v),
+  (v) => `Invalid UUID v4: Received ${show(v)}`,
+);
+
+/** prefix で始まる */
+export const startsWith = (prefix: string): Parser<string, string> =>
+  check(
+    (v) => v.startsWith(prefix),
+    (v) =>
+      `Invalid start: Expected ${show(prefix)} but received ${show(v.slice(0, prefix.length))}`,
+  );
+
 // ----------------------------------------------------------------------------
 // 検証 (数値)
 // ----------------------------------------------------------------------------
