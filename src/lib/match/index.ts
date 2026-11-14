@@ -23,4 +23,5 @@ export {
   NonExhaustiveError,
   P,
   type Pattern,
+  type UnionPattern,
 } from "./match.js";

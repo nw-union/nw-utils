@@ -3,7 +3,10 @@
 // ----------------------------------------------------------------------------
 
 /** Matcher を、リテラルやオブジェクトのパターンと区別するための印 */
-export const MATCHER = Symbol("@nw-union/nw-utils/lib/match");
+export const MATCHER = Symbol("@nw-union/nw-utils/lib/match/matcher");
+
+/** P.union のパターンを区別するための印 */
+export const UNION = Symbol("@nw-union/nw-utils/lib/match/union");
 
 /**
  * 値を判定するパターン (`P.string` など)
@@ -11,12 +14,17 @@ export const MATCHER = Symbol("@nw-union/nw-utils/lib/match");
  * - `T`: 一致したときの値の型 (型ガードで表す)
  * - `S`: 一致した値を handler に渡すか (`P.select()` のときだけ true)
  */
-export type Matcher<T, S extends boolean = false> = {
+export interface Matcher<T, S extends boolean = false> {
   readonly [MATCHER]: {
     readonly match: (value: unknown) => value is T;
     readonly select: S;
   };
-};
+}
+
+/** いずれかのパターンに一致するパターン (`P.union`) */
+export interface UnionPattern<Ps extends readonly unknown[]> {
+  readonly [UNION]: Ps;
+}
 
 const matcher = <T, S extends boolean>(
   match: (value: unknown) => value is T,
@@ -24,17 +32,20 @@ const matcher = <T, S extends boolean>(
 ): Matcher<T, S> =>
   Object.freeze({ [MATCHER]: Object.freeze({ match, select }) });
 
-const isString = matcher((v): v is string => typeof v === "string", false);
-const isBoolean = matcher((v): v is boolean => typeof v === "boolean", false);
-const anything = matcher((_v): _v is unknown => true, true);
+const always = (_v: unknown): _v is unknown => true;
+const wildcard = matcher(always, false);
+const selectAll = matcher(always, true);
 
 /** `match(...).with()` に渡すパターン */
 export const P = Object.freeze({
+  /** 何にでも一致する (値は取り出さない) */
+  _: wildcard,
+
   /** 文字列に一致する */
-  string: isString,
+  string: matcher((v): v is string => typeof v === "string", false),
 
   /** true / false に一致する */
-  boolean: isBoolean,
+  boolean: matcher((v): v is boolean => typeof v === "boolean", false),
 
   /** クラスのインスタンス (`instanceof`) に一致する */
   instanceOf: <C extends abstract new (...args: never[]) => unknown>(
@@ -42,11 +53,16 @@ export const P = Object.freeze({
   ): Matcher<InstanceType<C>> =>
     matcher((v): v is InstanceType<C> => v instanceof cls, false),
 
+  /** 渡したパターンのいずれかに一致する (前から順に試す) */
+  union: <const Ps extends readonly [unknown, ...unknown[]]>(
+    ...patterns: Ps
+  ): UnionPattern<Ps> => Object.freeze({ [UNION]: patterns }),
+
   /**
    * 何にでも一致し、その位置の値を handler に渡す
    * (1 つのパターンに 1 つだけ書ける)
    */
-  select: (): Matcher<unknown, true> => anything,
+  select: (): Matcher<unknown, true> => selectAll,
 });
 
 // ----------------------------------------------------------------------------
@@ -59,6 +75,7 @@ type Primitive = string | number | boolean | bigint | symbol | null | undefined;
  * 入力 `I` に対して書けるパターン
  *
  * - Matcher (`P.string` など)
+ * - `P.union(...)` (中身も `I` に対するパターン)
  * - `I` が取りうるリテラル
  * - オブジェクト (部分一致。`I` にあるキーだけ書ける)
  */
@@ -66,6 +83,7 @@ export type Pattern<I> = unknown extends I
   ? unknown
   :
       | Matcher<unknown, boolean>
+      | UnionPattern<readonly Pattern<I>[]>
       | (I extends Primitive ? I : never)
       | (I extends object
           ? { readonly [K in keyof I]?: Pattern<I[K]> }
@@ -86,15 +104,22 @@ export type Narrow<I, Pat> = unknown extends I
     : never;
 
 type NarrowOne<I, Pat> =
-  Pat extends Matcher<infer T, boolean>
-    ? unknown extends T
-      ? I
-      : NarrowLeaf<I, T>
-    : Pat extends Primitive
-      ? NarrowLeaf<I, Pat>
-      : I extends object
-        ? NarrowObject<I, Pat>
-        : never;
+  Pat extends UnionPattern<infer Ps>
+    ? number extends Ps["length"]
+      ? I // タプルでない配列 (型パラメータの制約そのもの) は展開しない
+      : NarrowEach<I, Ps[number]>
+    : Pat extends Matcher<infer T, boolean>
+      ? unknown extends T
+        ? I
+        : NarrowLeaf<I, T>
+      : Pat extends Primitive
+        ? NarrowLeaf<I, Pat>
+        : I extends object
+          ? NarrowObject<I, Pat>
+          : never;
+
+/** union の各パターンで絞り込んだ結果の union */
+type NarrowEach<I, Q> = Q extends unknown ? NarrowOne<I, Q> : never;
 
 type NarrowObject<I, Pat> = [Exclude<keyof Pat, keyof I>] extends [never]
   ? NarrowFields<I, Pat, { [K in keyof Pat]: Narrow<I[K & keyof I], Pat[K]> }>
@@ -127,13 +152,17 @@ type PropOf<I, K> = I extends unknown
 
 /** P.select() の位置にある型を `[T]` で返す (select がなければ never) */
 type FindSelect<I, Pat> =
-  Pat extends Matcher<unknown, infer S>
-    ? [S] extends [true]
-      ? [I]
-      : never
-    : Pat extends Primitive
+  Pat extends UnionPattern<infer Ps>
+    ? number extends Ps["length"]
       ? never
-      : { [K in keyof Pat]-?: FindSelect<PropOf<I, K>, Pat[K]> }[keyof Pat];
+      : FindSelect<I, Ps[number]>
+    : Pat extends Matcher<unknown, infer S>
+      ? [S] extends [true]
+        ? [I]
+        : never
+      : Pat extends Primitive
+        ? never
+        : { [K in keyof Pat]-?: FindSelect<PropOf<I, K>, Pat[K]> }[keyof Pat];
 
 /** handler が受け取る型 (select があればその値、なければ絞り込んだ入力) */
 export type Handled<I, Pat> = [FindSelect<Narrow<I, Pat>, Pat>] extends [never]
@@ -149,6 +178,7 @@ export type Handled<I, Pat> = [FindSelect<Narrow<I, Pat>, Pat>] extends [never]
 // - パターンがメンバーを完全に覆う → 取り除く
 // - 完全に覆っていないキーが 1 つだけ → そのキーの型だけを狭める
 // - それ以外 → 取り除かない
+// - P.union → 中のパターンを前から順に取り除く
 
 /** `R` からパターン `Pat` に必ず一致する部分を取り除く */
 export type ExcludeMatched<R, Pat> = R extends unknown
@@ -156,24 +186,37 @@ export type ExcludeMatched<R, Pat> = R extends unknown
   : never;
 
 type ExcludeOne<R, Pat> =
-  Pat extends Matcher<infer T, boolean>
-    ? unknown extends T
-      ? never
-      : [R] extends [T]
+  Pat extends UnionPattern<infer Ps>
+    ? ExcludeAll<R, Ps>
+    : Pat extends Matcher<infer T, boolean>
+      ? unknown extends T
         ? never
-        : R
-    : Pat extends Primitive
-      ? [R] extends [Pat]
-        ? never
-        : R
-      : R extends object
-        ? [NarrowObject<R, Pat>] extends [never]
-          ? R
-          : ExcludeFields<
-              R,
-              { [K in keyof Pat]: ExcludeMatched<R[K & keyof R], Pat[K]> }
-            >
-        : R;
+        : [R] extends [T]
+          ? never
+          : R
+      : Pat extends Primitive
+        ? [R] extends [Pat]
+          ? never
+          : R
+        : R extends object
+          ? [NarrowObject<R, Pat>] extends [never]
+            ? R
+            : [Extract<keyof Pat, OptionalKeys<R>>] extends [never]
+              ? ExcludeFields<
+                  R,
+                  { [K in keyof Pat]: ExcludeMatched<R[K & keyof R], Pat[K]> }
+                >
+              : R // 省略できるキーは、値がなければ一致しないので取り除かない
+          : R;
+
+/** 省略できる (`?:`) キー */
+type OptionalKeys<R> = {
+  [K in keyof R]-?: {} extends Pick<R, K> ? K : never;
+}[keyof R];
+
+type ExcludeAll<R, Ps> = Ps extends readonly [infer H, ...infer T]
+  ? ExcludeAll<ExcludeMatched<R, H>, T>
+  : R;
 
 type ExcludeFields<R, E> = {
   [K in keyof E]: [E[K]] extends [never] ? never : K;
@@ -203,6 +246,16 @@ export type NonExhaustive<Remaining> = {
 };
 
 /**
+ * 到達しない分岐のパターンに付く型
+ *
+ * `Remaining` (まだ一致していない型) にパターンが一致しうる部分がなければ、パターンを渡せなくする
+ * (`Remaining` は実際より広めに見積もっているので、ここでエラーになる分岐は本当に到達しない)
+ */
+type Reachable<Remaining, Pat> = [Narrow<Remaining, Pat>] extends [never]
+  ? { readonly 到達しない分岐です: Remaining }
+  : unknown;
+
+/**
  * `match(value)` が返すビルダー
  *
  * - `I`: 入力の型
@@ -210,9 +263,13 @@ export type NonExhaustive<Remaining> = {
  * - `Remaining`: まだどの分岐にも一致していない型
  */
 export type Match<I, R, Remaining> = {
-  /** パターンに一致したら handler を呼ぶ (最初に一致した分岐だけ) */
+  /**
+   * パターンに一致したら handler を呼ぶ (最初に一致した分岐だけ)
+   *
+   * それより前の分岐ですべて一致済みで、到達しない分岐を書くと型エラーになる
+   */
   with<const Pat extends Pattern<I>, Out>(
-    pattern: Pat,
+    pattern: Pat & Reachable<Remaining, Pat>,
     handler: (value: Handled<I, Pat>) => Out,
   ): Match<I, R | Out, ExcludeMatched<Remaining, Pat>>;
 
@@ -230,72 +287,98 @@ export type Match<I, R, Remaining> = {
 // 実行時
 // ----------------------------------------------------------------------------
 
+const show = (v: unknown): string => {
+  try {
+    return JSON.stringify(v) ?? String(v);
+  } catch {
+    return String(v);
+  }
+};
+
 /** どの分岐にも一致しなかったときのエラー */
 export class NonExhaustiveError extends Error {
   constructor(readonly input: unknown) {
-    let shown: string;
-    try {
-      shown = JSON.stringify(input) ?? String(input);
-    } catch {
-      shown = String(input);
-    }
-    super(`Pattern matching error: no pattern matches value ${shown}`);
+    super(`Pattern matching error: no pattern matches value ${show(input)}`);
     this.name = "NonExhaustiveError";
   }
 }
 
+/**
+ * パターンに一致した結果
+ *
+ * - `[]`: 一致した (select なし)
+ * - `[v]`: 一致し、P.select() の位置の値が v
+ * - 一致しなければ undefined
+ */
+type Hit = readonly [] | readonly [selected: unknown];
+
+const NO_SELECT: Hit = Object.freeze([]);
+
 const isMatcher = (p: unknown): p is Matcher<unknown, boolean> =>
   typeof p === "object" && p !== null && MATCHER in p;
 
-/** パターンに一致するか。select の値は onSelect に渡す */
-const matchPattern = (
-  pattern: unknown,
-  value: unknown,
-  onSelect: (v: unknown) => void,
-): boolean => {
-  if (isMatcher(pattern)) {
-    const m = pattern[MATCHER];
-    if (!m.match(value)) return false;
-    if (m.select) onSelect(value);
-    return true;
-  }
-  if (typeof pattern === "object" && pattern !== null) {
-    if (
-      (typeof value !== "object" && typeof value !== "function") ||
-      value === null
-    )
-      return false;
-    const obj = value as Record<string, unknown>;
-    return Object.keys(pattern).every(
-      (k) =>
-        k in obj &&
-        matchPattern((pattern as Record<string, unknown>)[k], obj[k], onSelect),
-    );
-  }
-  return pattern === value;
+const isUnion = (p: unknown): p is UnionPattern<readonly unknown[]> =>
+  typeof p === "object" && p !== null && UNION in p;
+
+const isObjectLike = (v: unknown): v is Record<PropertyKey, unknown> =>
+  (typeof v === "object" && v !== null) || typeof v === "function";
+
+/** 2 つの一致結果をまとめる (どちらかが一致しなければ一致しない。select は先のものを優先) */
+const both = (
+  a: Hit | undefined,
+  b: () => Hit | undefined,
+): Hit | undefined => {
+  if (a === undefined) return undefined;
+  const hb = b();
+  if (hb === undefined) return undefined;
+  return a.length > 0 ? a : hb;
 };
 
-type State = { matched: false } | { matched: true; output: unknown };
+/** パターンに一致するか (純粋関数) */
+const matchPattern = (pattern: unknown, value: unknown): Hit | undefined => {
+  if (isUnion(pattern))
+    return pattern[UNION].reduce<Hit | undefined>(
+      (hit, p) => hit ?? matchPattern(p, value),
+      undefined,
+    );
+  if (isMatcher(pattern)) {
+    const m = pattern[MATCHER];
+    if (!m.match(value)) return undefined;
+    return m.select ? [value] : NO_SELECT;
+  }
+  if (isObjectLike(pattern)) {
+    if (!isObjectLike(value)) return undefined;
+    return Object.keys(pattern).reduce<Hit | undefined>(
+      (hit, k) =>
+        both(hit, () =>
+          k in value ? matchPattern(pattern[k], value[k]) : undefined,
+        ),
+      NO_SELECT,
+    );
+  }
+  return pattern === value ? NO_SELECT : undefined;
+};
 
-const NOT_MATCHED: State = { matched: false };
+type State =
+  | { readonly matched: false }
+  | { readonly matched: true; readonly output: unknown };
+
+const NOT_MATCHED: State = Object.freeze({ matched: false });
 
 const builder = (input: unknown, state: State) => {
-  const self = {
+  const self = Object.freeze({
     with(pattern: unknown, handler: (v: unknown) => unknown) {
       if (state.matched) return self;
-      let selected: { value: unknown } | undefined;
-      const ok = matchPattern(pattern, input, (v) => {
-        selected = { value: v };
-      });
-      if (!ok) return self;
-      const output = handler(selected ? selected.value : input);
-      return builder(input, { matched: true, output });
+      const hit = matchPattern(pattern, input);
+      if (hit === undefined) return self;
+      const output = handler(hit.length > 0 ? hit[0] : input);
+      return builder(input, Object.freeze({ matched: true, output }));
     },
     exhaustive() {
       if (state.matched) return state.output;
       throw new NonExhaustiveError(input);
     },
-  };
+  });
   return self;
 };
 
@@ -306,8 +389,7 @@ const builder = (input: unknown, state: State) => {
  * ```typescript
  * const status = match(r) // Result<User, NotFoundError | ForbiddenError>
  *   .with({ type: "Success" }, ({ value }) => 200)
- *   .with({ type: "Failure", error: P.instanceOf(NotFoundError) }, () => 404)
- *   .with({ type: "Failure", error: P.instanceOf(ForbiddenError) }, () => 403)
+ *   .with({ type: "Failure", error: P.union(P.instanceOf(NotFoundError), P.instanceOf(ForbiddenError)) }, () => 400)
  *   .exhaustive();
  * ```
  */

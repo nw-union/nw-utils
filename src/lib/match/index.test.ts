@@ -320,3 +320,148 @@ describe("実行時", () => {
     expect([a, b]).toEqual(["a", "y"]);
   });
 });
+
+describe("P._", () => {
+  it("何にでも一致し、handler は入力全体を受け取る", () => {
+    const f = (v: "a" | "b" | "c") =>
+      match(v)
+        .with("a", () => "A")
+        .with(P._, (rest) => {
+          assertType<Equal<typeof rest, "a" | "b" | "c">>();
+          return `other:${rest}`;
+        })
+        .exhaustive();
+    expect([f("a"), f("c")]).toEqual(["A", "other:c"]);
+  });
+
+  it("オブジェクトの中では、キーがあることだけを確かめる", () => {
+    const f = (v: { a?: number }) =>
+      match(v)
+        .with({ a: P._ }, () => "has a")
+        .with(P._, () => "no a")
+        .exhaustive();
+    expect([f({ a: 1 }), f({})]).toEqual(["has a", "no a"]);
+  });
+});
+
+describe("省略できるキー", () => {
+  it("値がなければ一致しないので、網羅にならない", () => {
+    const _check = (v: { a?: number }) =>
+      match(v)
+        .with({ a: P._ }, () => 1)
+        // @ts-expect-error a がない値が残る
+        .exhaustive();
+  });
+});
+
+describe("P.union", () => {
+  it("いずれかのパターンに一致し、handler はそれらの union を受け取る", () => {
+    const f = (v: "a" | "b" | "c") =>
+      match(v)
+        .with(P.union("a", "b"), (ab) => {
+          assertType<Equal<typeof ab, "a" | "b">>();
+          return "ab";
+        })
+        .with("c", () => "c")
+        .exhaustive();
+    expect([f("a"), f("b"), f("c")]).toEqual(["ab", "ab", "c"]);
+  });
+
+  it("オブジェクトの中で使い、まとめて網羅できる", () => {
+    const toStatus = (r: Result<number, NotFound | Forbidden>) =>
+      match(r)
+        .with({ type: "Success" }, () => 200)
+        .with(
+          {
+            type: "Failure",
+            error: P.union(P.instanceOf(NotFound), P.instanceOf(Forbidden)),
+          },
+          ({ error }) => {
+            assertType<Equal<typeof error, NotFound | Forbidden>>();
+            return 400;
+          },
+        )
+        .exhaustive();
+    expect([toStatus(ok(1)), toStatus(err(new Forbidden()))]).toEqual([
+      200, 400,
+    ]);
+  });
+
+  it("中のパターンが足りなければ網羅にならない", () => {
+    const _check = (v: "a" | "b" | "c") =>
+      match(v)
+        .with(P.union("a", "b"), () => 1)
+        // @ts-expect-error "c" の分岐がない
+        .exhaustive();
+  });
+
+  it("判別共用体のメンバーをまとめられる", () => {
+    type Ev =
+      | { kind: "click"; x: number }
+      | { kind: "tap"; x: number }
+      | { kind: "key"; code: string };
+    const f = (e: Ev) =>
+      match(e)
+        .with(P.union({ kind: "click" }, { kind: "tap" }), ({ x }) => x)
+        .with({ kind: "key" }, ({ code }) => code)
+        .exhaustive();
+    expect([f({ kind: "tap", x: 1 }), f({ kind: "key", code: "a" })]).toEqual([
+      1,
+      "a",
+    ]);
+  });
+
+  it("中で P.select() を使える", () => {
+    const f = (v: { a: string } | { b: string }) =>
+      match(v)
+        .with(P.union({ a: P.select() }, { b: P.select() }), (s) => {
+          assertType<Equal<typeof s, string>>();
+          return s;
+        })
+        .exhaustive();
+    expect([f({ a: "x" }), f({ b: "y" })]).toEqual(["x", "y"]);
+  });
+
+  it("中にも取りえないリテラルは書けない", () => {
+    const v = "a" as "a" | "b";
+    // @ts-expect-error "z" は取りえない
+    match(v).with(P.union("a", "z"), () => 1);
+  });
+});
+
+describe("到達しない分岐", () => {
+  it("同じパターンを 2 回書くと型エラーになる", () => {
+    const _check = (r: Result<number, Error>) =>
+      match(r)
+        .with({ type: "Success" }, () => 1)
+        // @ts-expect-error Success はすでに一致済み
+        .with({ type: "Success" }, () => 2)
+        .with({ type: "Failure" }, () => 3);
+  });
+
+  it("網羅した後の P._ は型エラーになる", () => {
+    const _check = (v: boolean) =>
+      match(v)
+        .with(true, () => 1)
+        .with(false, () => 0)
+        // @ts-expect-error すべて一致済み
+        .with(P._, () => -1);
+  });
+
+  it("P.union で一致済みの分岐も検出する", () => {
+    const _check = (v: "a" | "b" | "c") =>
+      match(v)
+        .with(P.union("a", "b"), () => 1)
+        // @ts-expect-error "a" はすでに一致済み
+        .with("a", () => 2);
+  });
+
+  it("一部がまだ残っている分岐はエラーにならない", () => {
+    const f = (v: string) =>
+      match(v)
+        .with("a", () => 1)
+        .with(P.string, () => 2)
+        .exhaustive();
+    expect([f("a"), f("b")]).toEqual([1, 2]);
+  });
+});

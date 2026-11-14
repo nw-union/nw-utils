@@ -102,9 +102,10 @@ const f = async (id: string): ResultAsync<User, AppError> => {
 ts-pattern から使う機能だけを抜き出した、外部依存のないパターンマッチ (`import { match, P } from "@nw-union/nw-utils/lib/match"`)。
 
 - `match(value).with(pattern, handler)...exhaustive()` だけを持つ (`.otherwise` / `.when` などはない)
-- パターン: リテラル / オブジェクト (部分一致・ネスト可) / `P.string` / `P.boolean` / `P.instanceOf(Class)` / `P.select()` (1 パターンに 1 つ、名前なし)
+- パターン: リテラル / オブジェクト (部分一致・ネスト可) / `P._` (何でもよい) / `P.string` / `P.boolean` / `P.instanceOf(Class)` / `P.union(p1, p2, ...)` (いずれか) / `P.select()` (値を取り出す。1 パターンに 1 つ、名前なし)
 - handler の引数はパターンで絞り込まれる。`P.select()` があれば、その位置の値だけを受け取る
 - `exhaustive()` は分岐が足りないと型エラー。網羅性の判定は保守的 (完全に覆うか、覆っていないキーが 1 つだけのときだけ取り除く) で、網羅していないのに通ることはない
+- 到達しない分岐 (前の分岐で一致済み) を書くと、そのパターンの位置で型エラー
 - 実行時にどれにも一致しなければ `NonExhaustiveError` を throw する
 
 #### UUID ライブラリ (lib/uuid/)
