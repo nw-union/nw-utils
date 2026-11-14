@@ -1,6 +1,6 @@
-import { err, fromPromise, ok, okAsync, Result, ResultAsync } from "neverthrow";
 import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
+import { err, flowAsync, isErr, ok, Result } from "../../lib/result/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 // JWKS型定義
@@ -39,13 +39,13 @@ interface JWTPayload {
 
 export const newAuthCloudflare = (teamDomain: string, aud?: string): Auth => ({
   auth: (req: Request) =>
-    okAsync(req)
+    flowAsync(
+      ok(req),
       // step.1 request からトークンを取得
-      .andThen(getToken)
+      getToken,
       // step.2 トークンを検証
-      .andThen(
-        tokenVerify(`${teamDomain}/cdn-cgi/access/certs`, teamDomain, aud),
-      ),
+      tokenVerify(`${teamDomain}/cdn-cgi/access/certs`, teamDomain, aud),
+    ),
 });
 
 // Base64URL デコード
@@ -62,7 +62,7 @@ const base64UrlDecode = (str: string): string => {
 // JWT をデコード
 const decodeJWT = (
   token: string,
-): Result<
+): Result.Result<
   { header: JWTHeader; payload: JWTPayload; signature: string },
   AuthError
 > => {
@@ -172,7 +172,7 @@ const validatePayload = (
   payload: JWTPayload,
   issuer: string,
   audience?: string,
-): Result<void, AuthError> => {
+): Result.Result<void, AuthError> => {
   const now = Math.floor(Date.now() / 1000);
 
   // exp (有効期限) チェック
@@ -229,12 +229,12 @@ const validatePayload = (
  */
 const tokenVerify =
   (jwksUrl: string, issuer: string, audience?: string) =>
-  (token: string): ResultAsync<User, AuthError> =>
-    fromPromise(
-      (async () => {
+  (token: string): Result.ResultAsync<User, AuthError> =>
+    Result.tryAsync(
+      async () => {
         // JWT をデコード
         const decoded = decodeJWT(token);
-        if (decoded.isErr()) {
+        if (isErr(decoded)) {
           throw new AuthError(decoded.error.message);
         }
 
@@ -242,7 +242,7 @@ const tokenVerify =
 
         // ペイロードを検証
         const payloadValidation = validatePayload(payload, issuer, audience);
-        if (payloadValidation.isErr()) {
+        if (isErr(payloadValidation)) {
           throw new AuthError(payloadValidation.error.message);
         }
 
@@ -280,7 +280,7 @@ const tokenVerify =
           id: userId,
           mail: userEmail,
         };
-      })(),
+      },
       (e) => new AuthError(`Invalid JWT token: ${(e as Error).message}`),
     );
 
@@ -292,7 +292,7 @@ const AUTH_COOKIE_KEY = "CF_Authorization";
  * header で取得できればその値を, できなければ, Cookie から取得を試みる
  * どちらでも取得できなければエラーを返す
  */
-const getToken = (req: Request): Result<string, AuthError> =>
-  getTokenFromHeader(req, AUTH_HEADER_KEY).orElse(() =>
+const getToken = (req: Request): Result.Result<string, AuthError> =>
+  Result.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
     getTokenFromCookie(req, AUTH_COOKIE_KEY),
   );

@@ -11,7 +11,7 @@ NWU のアプリケーションに使用する TypeScript ユーティリティ�
 - **Runtime**: Bun
 - **Language**: TypeScript
 - **主要ライブラリ**:
-  - `neverthrow`: Result 型による関数型エラーハンドリング
+  - `lib/result` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
   - `zod`: スキーマバリデーション
   - `ts-pattern`: パターンマッチング
 - **Linter/Formatter**: Biome
@@ -65,7 +65,7 @@ AppError (基底クラス)
 
 #### Auth
 認証インターフェース。`Request` を受け取り、ユーザー識別子（通常はメールアドレス）を返します。
-- 戻り値: `ResultAsync<string, AuthError>`
+- 戻り値: `Result.ResultAsync<User, AuthError>`
 
 ### ライブラリ機能
 
@@ -107,7 +107,7 @@ Value Object パターンを簡単に実装するためのヘルパー関数を�
 
 **主な関数**:
 - `newType<T>(schema, type)`: Zod スキーマから型安全な VO 生成関数を作成
-  - 入力値をバリデーションし、`Result<T, ValidationError>` を返す
+  - 入力値をバリデーションし、`Result.Result<T, ValidationError>` を返す
   - バリデーションエラーは自動的に `ValidationError` に変換される
 
 **使用例**:
@@ -138,7 +138,7 @@ Cloudflare Access による JWT 認証を実装したアダプター。
 **使用方法**:
 ```typescript
 const auth = newCfAuth("https://your-team.cloudflareaccess.com", "your-aud");
-const result = await auth.auth(request); // ResultAsync<string, AuthError>
+const result = await auth.auth(request); // Result.Result<User, AuthError>
 ```
 
 内部実装:
@@ -170,7 +170,7 @@ bun run gen          # lib/result の flow / flowAsync のオーバーロード�
 
 ## 設計原則
 
-1. **関数型プログラミング**: `neverthrow` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
+1. **関数型プログラミング**: `lib/result` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
 2. **型安全性**: TypeScript の型システムを最大限活用し、ランタイムエラーを最小化
 3. **ランタイム非依存**: Cloudflare Workers など複数のランタイムで動作するよう、標準 Web API を優先使用
 4. **パターンマッチング**: `ts-pattern` を活用した宣言的なコード記述
@@ -178,7 +178,7 @@ bun run gen          # lib/result の flow / flowAsync のオーバーロード�
 
 ## 注意事項
 
-- すべての非同期エラーハンドリングは `ResultAsync` を使用すること
+- すべての非同期エラーハンドリングは `Result.ResultAsync` を使用すること
 - カスタムエラーを追加する場合は `error.ts` の階層に従うこと
 - 新しいアダプターは `interface.ts` で定義されたインターフェースを実装すること
 - Cloudflare Workers 環境では Node.js 固有の API を使用しないこと

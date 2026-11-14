@@ -1,12 +1,12 @@
-import { err, ok, Result } from "neverthrow";
 import { match, P } from "ts-pattern";
 import { AuthError } from "../error.js";
+import { err, ok, type Result } from "../lib/result/index.js";
 
 // Header からトークンを取得
 export const getTokenFromHeader = (
   req: Request,
   headerKey: string,
-): Result<string, AuthError> =>
+): Result.Result<string, AuthError> =>
   match(req.headers.get(headerKey))
     .with(P.string, (token) => ok(token))
     .with(null, () => err(new AuthError("No token found in headers")))
@@ -16,7 +16,7 @@ export const getTokenFromHeader = (
 export const getTokenFromCookie = (
   req: Request,
   cookieKey: string,
-): Result<string, AuthError> =>
+): Result.Result<string, AuthError> =>
   match(req.headers.get("Cookie"))
     .with(P.string, (cookieHeader) => {
       const cookies = parseCookie(cookieHeader);
