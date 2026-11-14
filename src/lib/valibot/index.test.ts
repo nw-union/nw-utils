@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import * as v from "valibot";
 import { isErr, isOk, type Result } from "../rslt/index.js";
-import { newType, newVoOrNone } from "./index.js";
+import { newType, newVoOrNone, v } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
 const unwrap = <T, E>(r: Result<T, E>): T => {
@@ -24,14 +23,14 @@ describe("newType", () => {
       const result = newEmail("test@example.com");
 
       expect(isOk(result)).toBe(true);
-      expect(unwrap(result)).toBe("test@example.com");
+      expect<string>(unwrap(result)).toBe("test@example.com");
     });
 
     it("型が付与された値を返すこと", () => {
       const result = newEmail("user@example.com");
       const value: Email = unwrap(result);
 
-      expect(value).toBe("user@example.com");
+      expect<string>(value).toBe("user@example.com");
     });
   });
 
@@ -127,7 +126,7 @@ describe("newVoOrNone", () => {
       const result = newOptionalEmail("test@example.com");
 
       expect(isOk(result)).toBe(true);
-      expect(unwrap(result)).toBe("test@example.com");
+      expect<string | null>(unwrap(result)).toBe("test@example.com");
     });
   });
 
@@ -170,5 +169,23 @@ describe("newVoOrNone", () => {
 
       expect(isErr(result)).toBe(true);
     });
+  });
+});
+
+describe("エラー内容", () => {
+  it("details に Issue のメッセージが入ること", () => {
+    const error = unwrapErr(newEmail("invalid-email"));
+
+    expect(error.details).toEqual([
+      'Email: Invalid email: Received "invalid-email"',
+    ]);
+  });
+
+  it("型が違う場合は型エラーのメッセージになること", () => {
+    const error = unwrapErr(newEmail(1));
+
+    expect(error.details).toEqual([
+      "Email: Invalid type: Expected string but received 1",
+    ]);
   });
 });

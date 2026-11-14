@@ -1,12 +1,14 @@
 /**
- * src/lib/rslt/result.ts の flow / flowAsync / pipe のオーバーロードを生成する
+ * src/lib/rslt/result.ts の flow / flowAsync / pipe と、
+ * src/lib/valibot/schema.ts の pipe のオーバーロードを生成する
  *
  * - `bun run gen`        : 生成してファイルを書き換える
  * - `bun run gen --check`: 生成結果とファイルが一致するか確認する (不一致なら exit 1)
  *
  * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync / pipe も同様)
  */
-const FILE = "src/lib/rslt/result.ts";
+const RSLT_FILE = "src/lib/rslt/result.ts";
+const VALIBOT_FILE = "src/lib/valibot/schema.ts";
 const MAX = 10; // つなげられる関数の最大数
 
 const overloads = (name: "flow" | "flowAsync"): string => {
@@ -49,11 +51,29 @@ const pipeOverloads = (): string => {
   return lines.join("\n");
 };
 
-const replaceBlock = (src: string, name: string, body: string): string => {
+// valibot の pipe: Step を左から順につなげる (Step 1〜MAX 個)
+const stepPipeOverloads = (): string => {
+  const lines: string[] = [];
+  for (let n = 1; n <= MAX; n++) {
+    const ts = ["A", ...Array.from({ length: n }, (_, i) => `B${i + 1}`)];
+    const params = ts.slice(1).map((t, i) => `s${i + 1}: Step<${ts[i]}, ${t}>`);
+    lines.push(
+      `export function pipe<${ts.join(", ")}>(${params.join(", ")}): Step<A, ${ts[n]}>;`,
+    );
+  }
+  return lines.join("\n");
+};
+
+const replaceBlock = (
+  file: string,
+  src: string,
+  name: string,
+  body: string,
+): string => {
   const re = new RegExp(
     `(// <generated:${name}>[^\\n]*\\n)[\\s\\S]*?(// </generated:${name}>)`,
   );
-  if (!re.test(src)) throw new Error(`marker for ${name} not found in ${FILE}`);
+  if (!re.test(src)) throw new Error(`marker for ${name} not found in ${file}`);
   return src.replace(
     re,
     (_, open: string, close: string) => `${open}${body}\n${close}`,
@@ -61,9 +81,9 @@ const replaceBlock = (src: string, name: string, body: string): string => {
 };
 
 // biome でフォーマットした結果を返す (プロジェクトの設定を使うため、パスを指定して stdin から渡す)
-const format = (src: string): string => {
+const format = (file: string, src: string): string => {
   const p = Bun.spawnSync(
-    ["bunx", "biome", "format", `--stdin-file-path=${FILE}`],
+    ["bunx", "biome", "format", `--stdin-file-path=${file}`],
     {
       stdin: new TextEncoder().encode(src),
     },
@@ -72,23 +92,43 @@ const format = (src: string): string => {
   return p.stdout.toString();
 };
 
-const current = await Bun.file(FILE).text();
-let next = current;
-for (const name of ["flow", "flowAsync"] as const) {
-  next = replaceBlock(next, name, overloads(name));
-}
-next = replaceBlock(next, "pipe", pipeOverloads());
-next = format(next);
+// 各ファイルの生成結果を求める
+const targets: { file: string; build: (src: string) => string }[] = [
+  {
+    file: RSLT_FILE,
+    build: (src) => {
+      let next = src;
+      for (const name of ["flow", "flowAsync"] as const) {
+        next = replaceBlock(RSLT_FILE, next, name, overloads(name));
+      }
+      return replaceBlock(RSLT_FILE, next, "pipe", pipeOverloads());
+    },
+  },
+  {
+    file: VALIBOT_FILE,
+    build: (src) =>
+      replaceBlock(VALIBOT_FILE, src, "pipe", stepPipeOverloads()),
+  },
+];
 
-if (process.argv.includes("--check")) {
-  if (next !== current) {
-    console.error(
-      `${FILE} の flow / flowAsync のオーバーロードが古い。bun run gen を実行すること`,
-    );
-    process.exit(1);
+const check = process.argv.includes("--check");
+let stale = false;
+for (const { file, build } of targets) {
+  const current = await Bun.file(file).text();
+  const next = format(file, build(current));
+  if (check) {
+    if (next !== current) {
+      console.error(
+        `${file} のオーバーロードが古い。bun run gen を実行すること`,
+      );
+      stale = true;
+    }
+  } else {
+    await Bun.write(file, next);
+    console.log(`generated: ${file}`);
   }
+}
+if (check) {
+  if (stale) process.exit(1);
   console.log("ok");
-} else {
-  await Bun.write(FILE, next);
-  console.log(`generated: ${FILE}`);
 }
