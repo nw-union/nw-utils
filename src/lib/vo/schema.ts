@@ -34,6 +34,14 @@ export type Brand<B extends string> = {
   readonly [brandSymbol]: { readonly [K in B]: B };
 };
 
+/** T に付いている brand 名 (null は除いて調べる。brand がなければ never) */
+export type BrandName<T> =
+  NonNullable<T> extends {
+    readonly [brandSymbol]: infer M;
+  }
+    ? Extract<keyof M, string>
+    : never;
+
 // ----------------------------------------------------------------------------
 // 内部ヘルパー
 // ----------------------------------------------------------------------------

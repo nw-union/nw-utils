@@ -67,15 +67,32 @@ describe("newVo", () => {
 
   it("数値のパーサーでも使える", () => {
     const newAge = newVo(
-      v.chain(v.number, v.integer, v.minValue(0), v.maxValue(150)),
+      v.chain(
+        v.number,
+        v.integer,
+        v.minValue(0),
+        v.maxValue(150),
+        v.brand("Age"),
+      ),
       "Age",
     );
 
-    expect(unwrap(newAge(25))).toBe(25);
+    expect<number>(unwrap(newAge(25))).toBe(25);
     expect(unwrapErr(newAge(200)).details).toEqual([
       "Age: Invalid value: Expected <=150 but received 200",
     ]);
     expect(isErr(newAge("25"))).toBe(true);
+  });
+});
+
+describe("newVo の型の制約", () => {
+  it("brand のないパーサーや、brand 名と違う type は型エラーになる", () => {
+    // @ts-expect-error 出力に brand がない
+    newVo(v.chain(v.string, v.email), "Email");
+    // @ts-expect-error type が brand 名と違う
+    newVo(email, "Emial");
+    // @ts-expect-error emptyAsNull を付けても brand がなければ型エラー
+    newVo(v.emptyAsNull(v.chain(v.string, v.email)), "Email");
   });
 });
 

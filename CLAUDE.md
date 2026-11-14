@@ -138,8 +138,8 @@ const result = newEmail("test@example.com"); // Result<Email, ValidationError>
   - 値: `string` / `number` / `boolean`, `nonEmpty` / `email`, `integer`
   - 関数: `minLength(n)` / `maxLength(n)` / `length(n)` / `regex(re)`, `minValue(n)` / `maxValue(n)`, `brand(name)`
   - 組み合わせ: `chain(p1, p2, ...)` (Kleisli 合成。最初の失敗で止まり、エラーは 1 件), `emptyAsNull(p)` (空文字列を `ok(null)` にする)
-- 型: `Parser`, `Schema`, `Issue`, `InferOutput`, `Brand`
-- VO ヘルパー: `newVo(schema, type)` (1 引数の `(src: unknown) => Result<T, ValidationError>` を返す), `withName(name)` (表示名を差し替える。`rslt.mapErr` 用)
+- 型: `Parser`, `Schema`, `Issue`, `InferOutput`, `Brand`, `BrandName`
+- VO ヘルパー: `newVo(schema, type)` (1 引数の `(src: unknown) => Result<T, ValidationError>` を返す。schema の出力に brand が必要で、type は brand 名と一致させる。満たさなければ型エラー), `withName(name)` (表示名を差し替える。`rslt.mapErr` 用)
 
 ```typescript
 import { newVo, v } from "@nw-union/nw-utils/lib/vo";

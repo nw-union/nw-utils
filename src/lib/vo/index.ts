@@ -14,9 +14,16 @@
  */
 import { ValidationError } from "../../error.js";
 import { err, isErr, type Result } from "../rslt/index.js";
-import type { Issue, Schema } from "./schema.js";
+import type { Brand, BrandName, Issue, Schema } from "./schema.js";
 
-export type { Brand, InferOutput, Issue, Parser, Schema } from "./schema.js";
+export type {
+  Brand,
+  BrandName,
+  InferOutput,
+  Issue,
+  Parser,
+  Schema,
+} from "./schema.js";
 
 // パーサーを v.string / v.chain() のように使うための入れ物
 export * as v from "./schema.js";
@@ -41,8 +48,12 @@ const toValidationError = (
  *
  * 返す関数は 1 引数なので、`Array.map` や `step` にそのまま渡せる
  *
- * @param schema パーサー
- * @param type VO の型名 (エラーメッセージに使う)
+ * 型で次のことを強制する (満たさなければコンパイルエラー)
+ * - schema の出力に `v.brand` が付いていること (`v.emptyAsNull` で null が加わるのはよい)
+ * - type が brand 名と一致すること
+ *
+ * @param schema パーサー (出力に brand が必要)
+ * @param type VO の型名。brand 名と同じ文字列 (エラーメッセージに使う)
  *
  * @example
  * ```typescript
@@ -55,7 +66,7 @@ const toValidationError = (
  * ```
  */
 export const newVo =
-  <O>(schema: Schema<O>, type: string) =>
+  <O extends Brand<string> | null>(schema: Schema<O>, type: BrandName<O>) =>
   (src: unknown): Result<O, ValidationError> => {
     const r = schema(src);
     return isErr(r) ? err(toValidationError(type, r.error)) : r;

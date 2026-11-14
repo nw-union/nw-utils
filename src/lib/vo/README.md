@@ -41,6 +41,9 @@ type InferOutput<P> = ...;
 
 // brand で付く型の印 (実行時には存在しない)
 type Brand<B extends string> = ...;
+
+// T に付いている brand 名 (null は除いて調べる。brand がなければ never)
+type BrandName<T> = ...;
 ```
 
 型は `v.InferOutput` のように `v` 経由でも、`import { type InferOutput }` のように名前でも参照できます。
@@ -111,7 +114,7 @@ age("20"); // { type: "Failure", error: { message: 'Invalid type: Expected numbe
 
 | 関数 | 説明 |
 | --- | --- |
-| `newVo(schema, type)` | `(src: unknown) => Result<T, ValidationError>` を返します |
+| `newVo(schema, type)` | `(src: unknown) => Result<T, ValidationError>` を返します。`schema` の出力には `v.brand` が必要で、`type` は brand 名と同じ文字列にします |
 | `withName(name)` | `newVo` が返した `ValidationError` の表示名を差し替える関数を返します (`rslt.mapErr` 用) |
 
 ```typescript
@@ -123,6 +126,14 @@ export const newOptionalEmail = newVo(v.emptyAsNull(email), "Email");
 newEmail("a@example.com"); // ok(Email)
 newOptionalEmail(""); // ok(null)
 inputs.map(newEmail); // Result<Email, ValidationError>[]
+```
+
+`newVo` は次の場合にコンパイルエラーになります。VO には必ず brand を付け、エラーに出る型名と brand 名を揃えるためです。
+
+```typescript
+newVo(v.chain(v.string, v.email), "Email"); // ❌ 出力に brand がない
+newVo(email, "Emial"); // ❌ type が brand 名 ("Email") と違う
+newVo(v.chain(v.email, v.brand("Email")), "Email"); // ❌ 先頭に型チェック (v.string など) がない
 ```
 
 失敗時の `ValidationError` は次のとおりです。
