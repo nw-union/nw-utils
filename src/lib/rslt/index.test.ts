@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { match, P } from "ts-pattern";
+import { match, P } from "../match/index.js";
 import {
   collect,
   collectAsync,
@@ -48,7 +48,7 @@ describe("Result の値", () => {
     expect(JSON.stringify(ok(1))).toBe('{"type":"Success","value":1}');
     expect(JSON.stringify(err("e"))).toBe('{"type":"Failure","error":"e"}');
   });
-  it("ts-pattern で分岐できる", () => {
+  it("match で分岐できる", () => {
     const f = (r: Result<number, string>) =>
       match(r)
         .with({ type: "Success" }, ({ value }) => `ok:${value}`)
@@ -59,7 +59,7 @@ describe("Result の値", () => {
   });
 });
 
-describe("ts-pattern との組み合わせ", () => {
+describe("lib/match との組み合わせ", () => {
   class NotFound extends Error {
     readonly kind = "NotFound";
   }

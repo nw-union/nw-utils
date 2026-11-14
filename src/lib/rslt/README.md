@@ -30,7 +30,7 @@ type Result<T, E> = Success<T> | Failure<E>;
 type ResultAsync<T, E> = Promise<Result<T, E>>;
 ```
 
-Result はクラスではなく、書き換え不可 (frozen) の普通のオブジェクトです。JSON にしたり、`ts-pattern` でそのまま分岐したりできます。
+Result はクラスではなく、書き換え不可 (frozen) の普通のオブジェクトです。JSON にしたり、`lib/match` でそのまま分岐したりできます。
 
 ## 作る
 
@@ -61,12 +61,12 @@ const toUser = (r: Result<string, AuthError>): Result<User, AuthError> => {
 };
 ```
 
-### ts-pattern で値に変える
+### lib/match で値に変える
 
-Result を最後に値 (レスポンス、メッセージなど) へ変えるときは、`ts-pattern` の `match` を使います。このライブラリに `match` / `fold` はありません。
+Result を最後に値 (レスポンス、メッセージなど) へ変えるときは、`lib/match` の `match` を使います。このライブラリに `match` / `fold` はありません。
 
 ```typescript
-import { match, P } from "ts-pattern";
+import { match, P } from "@nw-union/nw-utils/lib/match";
 
 const status = match(findUser(id)) // Result<User, NotFoundError | ForbiddenError>
   .with({ type: "Success" }, ({ value }) => json(value, 200))

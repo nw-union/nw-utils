@@ -1,4 +1,3 @@
-import { match } from "ts-pattern";
 import {
   type BaseIssue,
   type GenericSchema,
@@ -7,6 +6,7 @@ import {
   ValiError,
 } from "valibot";
 import { ValidationError } from "../../error.js";
+import { match } from "../match/index.js";
 import { err, ok, type Result } from "../rslt/index.js";
 
 /**

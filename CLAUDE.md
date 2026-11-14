@@ -13,7 +13,7 @@ NWU のアプリケーションに使用する TypeScript ユーティリティ�
 - **主要ライブラリ**:
   - `lib/rslt` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
   - `zod`: スキーマバリデーション
-  - `ts-pattern`: パターンマッチング
+  - `lib/match` (自前): パターンマッチング (ts-pattern の必要な機能だけを抜き出したもの。外部依存なし)
 - **Linter/Formatter**: Biome
 
 ## プロジェクト構成
@@ -24,6 +24,9 @@ src/
 ├── error.ts                  # カスタムエラークラス定義
 ├── interface.ts              # 共通インターフェース定義
 ├── lib/
+│   ├── match/                # パターンマッチ (match / P)
+│   │   ├── index.ts
+│   │   └── match.ts
 │   ├── rslt/                 # Result 型ライブラリ
 │   │   ├── index.ts
 │   │   └── result.ts
@@ -76,7 +79,7 @@ AppError (基底クラス)
 - 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
 - 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
 - 判定: `isErr(r)` (型ガード。`isOk` はなし。`if (isErr(r)) return r;` で早期リターンし、以降は Success に絞り込まれる)
-- 値に変える: ts-pattern の `match(r).with({ type: "Success" }, ...).with({ type: "Failure" }, ...).exhaustive()` を使う (`match` / `fold` はライブラリに持たない)
+- 値に変える: `lib/match` の `match(r).with({ type: "Success" }, ...).with({ type: "Failure" }, ...).exhaustive()` を使う (`match` / `fold` はライブラリに持たない)
 - 変換: `rslt.map`, `rslt.mapErr`, `rslt.andThen`, `rslt.orElse` (すべて同期・data-last。`rslt.map(fn)` は Result を受け取る関数を返し、`rslt.pipe(r, rslt.map(fn), ...)` のように使う)
 - `rslt.pipe`: 値を左から順に関数へ通す (最大 10 個。名前で import せず `rslt.pipe` で使う)
 - 連結: `step`, `stepAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる。戻り値が Result なら自動で平らにするため、Functor / Monad の法則は満たさない。厳密に扱うなら `rslt.pipe` + `rslt.map` / `rslt.andThen`)
@@ -93,6 +96,16 @@ const f = async (id: string): ResultAsync<User, AppError> => {
   return rslt.tryAsync(() => fetchUser(valid.value), toAppError);
 };
 ```
+
+#### パターンマッチ (lib/match/)
+
+ts-pattern から使う機能だけを抜き出した、外部依存のないパターンマッチ (`import { match, P } from "@nw-union/nw-utils/lib/match"`)。
+
+- `match(value).with(pattern, handler)...exhaustive()` だけを持つ (`.otherwise` / `.when` などはない)
+- パターン: リテラル / オブジェクト (部分一致・ネスト可) / `P.string` / `P.boolean` / `P.instanceOf(Class)` / `P.select()` (1 パターンに 1 つ、名前なし)
+- handler の引数はパターンで絞り込まれる。`P.select()` があれば、その位置の値だけを受け取る
+- `exhaustive()` は分岐が足りないと型エラー。網羅性の判定は保守的 (完全に覆うか、覆っていないキーが 1 つだけのときだけ取り除く) で、網羅していないのに通ることはない
+- 実行時にどれにも一致しなければ `NonExhaustiveError` を throw する
 
 #### UUID ライブラリ (lib/uuid/)
 
@@ -158,6 +171,7 @@ const result = await auth.auth(request); // Result<User, AuthError>
 以下のサブパス export が利用可能です:
 
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
+- `@nw-union/nw-utils/lib/match` - パターンマッチ
 - `@nw-union/nw-utils/lib/rslt` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
@@ -177,7 +191,7 @@ bun run gen          # lib/rslt の step / stepAsync / pipe のオーバーロ�
 1. **関数型プログラミング**: `lib/rslt` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
 2. **型安全性**: TypeScript の型システムを最大限活用し、ランタイムエラーを最小化
 3. **ランタイム非依存**: Cloudflare Workers など複数のランタイムで動作するよう、標準 Web API を優先使用
-4. **パターンマッチング**: `ts-pattern` を活用した宣言的なコード記述
+4. **パターンマッチング**: `lib/match` を活用した宣言的なコード記述
 5. **明示的なエラー型**: すべてのエラーは `AppError` の階層に属し、適切な詳細情報を持つ
 
 ## 注意事項
