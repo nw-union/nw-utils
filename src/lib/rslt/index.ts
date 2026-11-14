@@ -7,18 +7,18 @@
  * - 変換関数 (`rslt.map(fn)` など) は「Result を受け取る関数」を返す (data-last)。`rslt.pipe` に並べて使う。すべて同期
  * - 非同期は `flowAsync` か async/await で扱う
  *
- * よく使うもの (`ok`, `err`, `isOk`, `isErr`, `flow`, `flowAsync`, `through`, `throughAsync`, `sequence`, `collect`, 型) は名前で import し、
+ * よく使うもの (`ok`, `err`, `isErr`, `flow`, `flowAsync`, `through`, `throughAsync`, `tee`, `sequence`, `collect`, 型) は名前で import し、
  * それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う
  *
  * @example
  * ```typescript
- * import { isErr, isOk, rslt, type Result, type ResultAsync } from "@nw-union/nw-utils/lib/rslt";
+ * import { isErr, rslt, type Result, type ResultAsync } from "@nw-union/nw-utils/lib/rslt";
  *
  * const parse = (s: string): Result<number, Error> =>
  *   rslt.try(() => JSON.parse(s) as number, (e) => new Error(String(e)));
  *
  * const r = rslt.pipe(parse("1"), rslt.map((n) => n + 1));
- * if (isOk(r)) console.log(r.value);
+ * if (!isErr(r)) console.log(r.value);
  *
  * const fetchUser = async (id: string): ResultAsync<User, AppError> => {
  *   const valid = validateId(id);
