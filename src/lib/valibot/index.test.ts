@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import * as v from "valibot";
-import { isErr, isOk, type Result } from "../result/index.js";
+import { isErr, isOk, type Result } from "../rslt/index.js";
 import { newType, newVoOrNone } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)

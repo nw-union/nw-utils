@@ -1,12 +1,12 @@
-# @nw-union/nw-utils/lib/result
+# @nw-union/nw-utils/lib/rslt
 
 外部依存のない、最小限の Result 型ライブラリです。
 
 例外を投げる代わりに「成功」か「失敗」かを値として返し、エラーを型で明示的に扱えるようにします。
 
 ```typescript
-import * as rslt from "@nw-union/nw-utils/lib/result";
-import { err, isErr, ok, type Result } from "@nw-union/nw-utils/lib/result";
+import * as rslt from "@nw-union/nw-utils/lib/rslt";
+import { err, isErr, ok, type Result } from "@nw-union/nw-utils/lib/rslt";
 
 const r: Result<number, Error> = rslt.map(ok(1), (n) => n + 1);
 ```
@@ -265,7 +265,7 @@ if (isErr(r)) expect(r.error.code).toBe("Validation Error");
 
 ## 他ライブラリとの対応
 
-| neverthrow | @praha/byethrow | lib/result |
+| neverthrow | @praha/byethrow | lib/rslt |
 | --- | --- | --- |
 | `ok(v)` / `err(e)` | `Result.succeed(v)` / `Result.fail(e)` | `ok(v)` / `err(e)` |
 | `r.isOk()` / `r.isErr()` | `Result.isSuccess(r)` / `Result.isFailure(r)` | `isOk(r)` / `isErr(r)` |

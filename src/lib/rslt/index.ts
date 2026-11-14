@@ -11,8 +11,8 @@
  *
  * @example
  * ```typescript
- * import * as rslt from "@nw-union/nw-utils/lib/result";
- * import { isErr, isOk, type Result, type ResultAsync } from "@nw-union/nw-utils/lib/result";
+ * import * as rslt from "@nw-union/nw-utils/lib/rslt";
+ * import { isErr, isOk, type Result, type ResultAsync } from "@nw-union/nw-utils/lib/rslt";
  *
  * const parse = (s: string): Result<number, Error> =>
  *   rslt.try(() => JSON.parse(s) as number, (e) => new Error(String(e)));

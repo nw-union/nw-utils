@@ -1,6 +1,6 @@
 import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
-import * as rslt from "../../lib/result/index.js";
+import * as rslt from "../../lib/rslt/index.js";
 import {
   err,
   flowAsync,
@@ -8,7 +8,7 @@ import {
   ok,
   type Result,
   type ResultAsync,
-} from "../../lib/result/index.js";
+} from "../../lib/rslt/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 // JWKS型定義

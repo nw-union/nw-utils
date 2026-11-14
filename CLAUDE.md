@@ -11,7 +11,7 @@ NWU のアプリケーションに使用する TypeScript ユーティリティ�
 - **Runtime**: Bun
 - **Language**: TypeScript
 - **主要ライブラリ**:
-  - `lib/result` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
+  - `lib/rslt` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
   - `zod`: スキーマバリデーション
   - `ts-pattern`: パターンマッチング
 - **Linter/Formatter**: Biome
@@ -24,7 +24,7 @@ src/
 ├── error.ts                  # カスタムエラークラス定義
 ├── interface.ts              # 共通インターフェース定義
 ├── lib/
-│   ├── result/               # Result 型ライブラリ
+│   ├── rslt/                 # Result 型ライブラリ
 │   │   ├── index.ts
 │   │   └── result.ts
 │   ├── uuid/                 # UUID 生成・変換ユーティリティ
@@ -69,9 +69,9 @@ AppError (基底クラス)
 
 ### ライブラリ機能
 
-#### Result ライブラリ (lib/result/)
+#### Result ライブラリ (lib/rslt/)
 
-外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `import * as rslt from "@nw-union/nw-utils/lib/result"` して `rslt.map` / `rslt.try` のように使う。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `import * as rslt from "@nw-union/nw-utils/lib/rslt"` して `rslt.map` / `rslt.try` のように使う。
 
 - 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
 - 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
@@ -154,7 +154,7 @@ const result = await auth.auth(request); // Result<User, AuthError>
 以下のサブパス export が利用可能です:
 
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
-- `@nw-union/nw-utils/lib/result` - Result 型
+- `@nw-union/nw-utils/lib/rslt` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
 - `@nw-union/nw-utils/adapter/auth-mock` - モック認証
@@ -165,12 +165,12 @@ const result = await auth.auth(request); // Result<User, AuthError>
 ```bash
 bun run build        # TypeScript のビルド
 bun run check        # Biome による lint と format
-bun run gen          # lib/result の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
+bun run gen          # lib/rslt の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
 ```
 
 ## 設計原則
 
-1. **関数型プログラミング**: `lib/result` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
+1. **関数型プログラミング**: `lib/rslt` の Result 型を使用し、例外ではなく明示的なエラーハンドリングを推奨
 2. **型安全性**: TypeScript の型システムを最大限活用し、ランタイムエラーを最小化
 3. **ランタイム非依存**: Cloudflare Workers など複数のランタイムで動作するよう、標準 Web API を優先使用
 4. **パターンマッチング**: `ts-pattern` を活用した宣言的なコード記述

@@ -1,6 +1,6 @@
 import { match, P } from "ts-pattern";
 import { AuthError } from "../error.js";
-import { err, ok, type Result } from "../lib/result/index.js";
+import { err, ok, type Result } from "../lib/rslt/index.js";
 
 // Header からトークンを取得
 export const getTokenFromHeader = (

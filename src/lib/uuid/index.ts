@@ -1,5 +1,5 @@
-import * as rslt from "../result/index.js";
-import { err, ok, type Result } from "../result/index.js";
+import * as rslt from "../rslt/index.js";
+import { err, ok, type Result } from "../rslt/index.js";
 
 /**
  * Web Crypto API を使用した UUID v4 生成

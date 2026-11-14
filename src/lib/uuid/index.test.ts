@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isErr, type Result } from "../result/index.js";
+import { isErr, type Result } from "../rslt/index.js";
 import { fromShortUuid, toShortUuid, uuidv4 } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)

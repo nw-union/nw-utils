@@ -1,5 +1,5 @@
 import type { AppError, AuthError } from "./error.js";
-import type { ResultAsync } from "./lib/result/index.js";
+import type { ResultAsync } from "./lib/rslt/index.js";
 
 // ----------------------------------------------
 // Logger ロガー

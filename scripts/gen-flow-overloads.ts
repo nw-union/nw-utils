@@ -1,12 +1,12 @@
 /**
- * src/lib/result/result.ts の flow / flowAsync のオーバーロードを生成する
+ * src/lib/rslt/result.ts の flow / flowAsync のオーバーロードを生成する
  *
  * - `bun run gen`        : 生成してファイルを書き換える
  * - `bun run gen --check`: 生成結果とファイルが一致するか確認する (不一致なら exit 1)
  *
  * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync も同様)
  */
-const FILE = "src/lib/result/result.ts";
+const FILE = "src/lib/rslt/result.ts";
 const MAX = 10; // つなげられる関数の最大数
 
 const overloads = (name: "flow" | "flowAsync"): string => {
