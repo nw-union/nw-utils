@@ -135,6 +135,7 @@ const user = step(
 ```
 
 - `step` / `through` に Promise を返す関数を渡すと型エラーになります
+- `through` / `throughAsync` / `tee` の値の型は、直前の成功値から決まります。`(v: unknown) => void` のような引数の型が広い関数 (ロガーなど) をそのまま渡しても、次の関数には元の型のまま渡ります。step の外で単体で作るときは型引数を書きます (`through<number, void>(fn)`)
 - 「`void` を返したら自動で素通り」にしないのは、実行時に `void` と `undefined` を区別できず、`User | undefined` を返す関数の結果を取り違えるためです
 
 > [!NOTE]

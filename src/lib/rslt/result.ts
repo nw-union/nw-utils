@@ -593,6 +593,8 @@ export async function stepAsync(
  * - fn が Failure を返したら、その Failure を返す (後続の処理は止まる)
  * - fn が void / 成功の Result / それ以外の値を返したら、元の成功値をそのまま返す
  * - Promise を返す関数は渡せない (型エラー)。非同期には `throughAsync` を使う
+ * - 値の型は step 側 (直前の成功値) から決まる。引数の型が広い関数 (`(s: unknown) => void` など) を渡しても、
+ *   次の関数には直前の成功値の型がそのまま渡る。step の外で単体で使うときは型引数を書く (`through<number, void>(fn)`)
  *
  * ログ出力や、値を変えない検証 (権限チェックなど) を step の途中に挟むのに使う
  *
@@ -608,7 +610,7 @@ export async function stepAsync(
  * ```
  */
 export const through =
-  <T, R>(fn: (v: T) => R & NotPromise<R>) =>
+  <T, R>(fn: (v: NoInfer<T>) => R & NotPromise<R>) =>
   (v: T): Result<T, Err<R>> => {
     const out = fn(v);
     return isResult(out) && isErr(out) ? (out as Failure<Err<R>>) : ok(v);
@@ -624,7 +626,7 @@ export const through =
  * ```
  */
 export const throughAsync =
-  <T, R>(fn: (v: T) => R) =>
+  <T, R>(fn: (v: NoInfer<T>) => R) =>
   async (v: T): ResultAsync<T, Err<Awaited<R>>> => {
     const out = await fn(v);
     return isResult(out) && isErr(out)
@@ -671,7 +673,7 @@ const runIgnoringErrors = (fn: () => unknown): void => {
  * ```
  */
 export const tee =
-  <T>(fn: (v: T) => unknown) =>
+  <T>(fn: (v: NoInfer<T>) => unknown) =>
   (v: T): Result<T, never> => {
     runIgnoringErrors(() => fn(v));
     return ok(v);
