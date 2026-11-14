@@ -474,6 +474,71 @@ export async function flowAsync(
 }
 
 // ----------------------------------------------------------------------------
+// through (値を素通りさせる)
+// ----------------------------------------------------------------------------
+
+/**
+ * 成功値を使って処理を実行し、その戻り値は捨てて **元の成功値をそのまま返す** 関数を作る (flow 用)
+ *
+ * - fn が Failure を返したら、その Failure を返す (後続の処理は止まる)
+ * - fn が void / 成功の Result / それ以外の値を返したら、元の成功値をそのまま返す
+ * - Promise を返す関数は渡せない (型エラー)。非同期には `throughAsync` を使う
+ *
+ * ログ出力や、値を変えない検証 (権限チェックなど) を flow の途中に挟むのに使う
+ *
+ * @example
+ * ```typescript
+ * flow(
+ *   ok(req),
+ *   getToken,                  // Result<string, AuthError>
+ *   through(checkNotRevoked),  // (token: string) => Result<void, AuthError>
+ *   through(logToken),         // (token: string) => void
+ *   tokenToUser,               // token がそのまま渡る
+ * );
+ * ```
+ */
+export const through =
+  <T, R>(fn: (v: T) => R & NotPromise<R>) =>
+  (v: T): Result<T, Err<R>> => {
+    const out = fn(v);
+    return isResult(out) && isErr(out) ? (out as Failure<Err<R>>) : ok(v);
+  };
+
+/**
+ * `through` の非同期版 (flowAsync 用)。fn は Promise を返してもよく、必ず Promise を返す
+ *
+ * @example
+ * ```typescript
+ * await flowAsync(ok(req), getToken, throughAsync(saveAccessLog), tokenToUser);
+ * // saveAccessLog: (token: string) => ResultAsync<void, DbError>
+ * ```
+ */
+export const throughAsync =
+  <T, R>(fn: (v: T) => R) =>
+  async (v: T): ResultAsync<T, Err<Awaited<R>>> => {
+    const out = await fn(v);
+    return isResult(out) && isErr(out)
+      ? (out as Failure<Err<Awaited<R>>>)
+      : ok(v);
+  };
+
+/**
+ * Result の成功値を使って処理を実行し、元の Result をそのまま返す (data-first 版の through)
+ *
+ * neverthrow の `andThrough` / `andTee` に相当する
+ *
+ * @example
+ * ```typescript
+ * const r = rslt.andThrough(newEmail(input), checkNotBlocked);
+ * // Result<Email, ValidationError | BlockedError>  (成功なら newEmail の結果がそのまま)
+ * ```
+ */
+export const andThrough = <T, E, R>(
+  r: Result<T, E>,
+  fn: (v: T) => R & NotPromise<R>,
+): Result<T, E | Err<R>> => (isErr(r) ? r : through<T, R>(fn)(r.value));
+
+// ----------------------------------------------------------------------------
 // sequence / collect (複数の Result をまとめる)
 // ----------------------------------------------------------------------------
 

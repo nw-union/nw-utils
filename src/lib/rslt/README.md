@@ -10,7 +10,7 @@ import { err, isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt";
 const r: Result<number, Error> = rslt.map(ok(1), (n) => n + 1);
 ```
 
-- よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型) は名前で import します
+- よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` と型) は名前で import します
 - それ以外 (`map` / `mapError` / `andThen` / `orElse` / `try` / `tryAsync` など) は `rslt` を import して `rslt.map` のように使います。`map` のような一般的な名前を直接 import すると利用側の名前とぶつかりやすく、`try` は予約語なので単独の名前としては import できないためです
 
 ## 特徴
@@ -164,6 +164,46 @@ const r = await flowAsync(ok(req), getToken, verifyToken, toUser);
 > - `rslt.orElse` / `rslt.mapError` のような失敗側の処理は `flow` の中には書けません。`flow` の結果に対して呼んでください
 > - Result かどうかは `{ type: "Success", value }` / `{ type: "Failure", error }` という形で判定します。成功値としてこの形のオブジェクトを返すと Result として扱われます (型の推論も同じ扱いになります)
 
+#### 値を変えない処理を挟む (through / throughAsync)
+
+ログ出力や、値を変えない検証 (権限チェックなど) を `flow` の途中に挟みたいときは `through` で包みます。包んだ関数の戻り値は捨てられ、**直前の成功値がそのまま次の関数に渡ります**。
+
+| 関数 | 説明 |
+| --- | --- |
+| `through(fn)` | `flow` 用。`fn` を実行し、直前の成功値をそのまま次に渡す |
+| `throughAsync(fn)` | `flowAsync` 用。`fn` は Promise を返してもよい |
+
+- `fn` が `void` / 成功の Result / それ以外の値を返したら、直前の成功値をそのまま次に渡す
+- `fn` が Failure を返したら、そこで止まってその Failure を返す
+- エラー型には `fn` が返しうる Failure の型だけが足される (`void` を返す関数ならエラー型は増えない)
+
+```typescript
+// checkNotRevoked: (token: string) => Result<void, AuthError>
+// logToken:        (token: string) => void
+// saveAccessLog:   (token: string) => ResultAsync<void, DbError>
+const user = flow(
+  ok(req),
+  getToken,                  // Result<string, AuthError>
+  through(checkNotRevoked),  // 失効していたらここで止まる
+  through(logToken),         // ログを出すだけ
+  tokenToUser,               // getToken の結果 (token) がそのまま渡る
+);
+// user: Result<User, AuthError>
+
+const user2 = await flowAsync(ok(req), getToken, throughAsync(saveAccessLog), tokenToUser);
+// user2: Result<User, AuthError | DbError>
+```
+
+`flow` を使わずに 1 つの Result に対して実行したい場合は `rslt.andThrough(r, fn)` を使います (neverthrow の `andThrough` / `andTee` に相当)。
+
+```typescript
+const r = rslt.andThrough(newEmail(input), checkNotBlocked);
+// 成功なら newEmail の結果がそのまま返る。checkNotBlocked が Failure を返したらその Failure
+```
+
+> [!NOTE]
+> `through` に Promise を返す関数を渡すと型エラーになります。非同期の処理は `throughAsync` を `flowAsync` の中で使ってください。
+
 ### 複数の Result をまとめる (sequence / collect)
 
 | 関数 | 説明 |
@@ -278,6 +318,7 @@ if (isErr(r)) expect(r.error.code).toBe("Validation Error");
 | `Result.combineWithAllErrors([...])` | `Result.collect(x)` | `collect(x)` |
 | `ResultAsync.combine([...])` | `Result.sequence(x)` | `sequenceAsync(x)` |
 | `ResultAsync.combineWithAllErrors([...])` | `Result.collect(x)` | `collectAsync(x)` |
+| `r.andThrough(f)` / `r.andTee(f)` | `Result.pipe(r, Result.andThrough(f))` | `rslt.andThrough(r, f)` / `flow` の中では `through(f)` |
 | `r._unsafeUnwrap()` | `Result.unwrap(r)` | なし (`toEqual(ok(v))` か `isOk` で絞り込む) |
 | `ok(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `flow(r, f, g)` |
 | `okAsync(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `flowAsync(r, f, g)` |

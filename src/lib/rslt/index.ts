@@ -6,7 +6,7 @@
  *   (`rslt.map` のように `rslt` 経由で使っても同じ)
  * - 変換関数はすべて data-first の同期関数。非同期は `flowAsync` か async/await で扱う
  *
- * よく使うもの (`ok`, `err`, `isOk`, `isErr`, `flow`, `flowAsync`, `sequence`, `collect`, 型) は名前で import し、
+ * よく使うもの (`ok`, `err`, `isOk`, `isErr`, `flow`, `flowAsync`, `through`, `throughAsync`, `sequence`, `collect`, 型) は名前で import し、
  * それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う
  *
  * @example

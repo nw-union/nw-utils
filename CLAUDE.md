@@ -71,13 +71,14 @@ AppError (基底クラス)
 
 #### Result ライブラリ (lib/rslt/)
 
-外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う (`import { isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt"`)。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う (`import { isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt"`)。
 
 - 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
 - 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
 - 変換: `rslt.map`, `rslt.mapError`, `rslt.andThen`, `rslt.orElse` (すべて同期・data-first)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
+- 素通り: `through` (flow 用), `throughAsync` (flowAsync 用), `rslt.andThrough` (関数の戻り値を捨てて直前の成功値をそのまま渡す。Failure なら止まる)
 - 集約: `sequence` (最初の Failure), `collect` (全エラー), `sequenceAsync`, `collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:
