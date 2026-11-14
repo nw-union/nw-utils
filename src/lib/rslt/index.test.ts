@@ -14,6 +14,8 @@ import {
   rslt,
   sequence,
   sequenceAsync,
+  through,
+  throughAsync,
 } from "./index.js";
 
 const ok1: Result<number, string> = ok(1);
@@ -458,5 +460,129 @@ describe("sequenceAsync / collectAsync", () => {
   it("同期的な Result だけでも必ず Promise を返す", () => {
     expect(sequenceAsync([err("e")])).toBeInstanceOf(Promise);
     expect(collectAsync([err("e")])).toBeInstanceOf(Promise);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// through / throughAsync / andThrough
+// ----------------------------------------------------------------------------
+
+describe("through", () => {
+  const checkNotBanned = (mail: string): Result<void, AuthError> =>
+    mail.startsWith("banned") ? err(new AuthError("banned")) : ok();
+
+  it("void を返す関数を挟んでも、元の値がそのまま次に渡る", () => {
+    const logs: string[] = [];
+    const r = flow(
+      ok({ token: "a@b" }),
+      getToken,
+      through((t) => {
+        logs.push(t); // t は string と推論される
+      }),
+      tokenToUser,
+    );
+    assertType<Equal<typeof r, Result<User, AuthError>>>();
+    expect(r).toEqual(ok({ mail: "a@b" }));
+    expect(logs).toEqual(["a@b"]);
+  });
+
+  it("成功の Result を返したら元の値を渡し、Failure ならそこで止まる", () => {
+    const ok1 = flow(
+      ok({ token: "a@b" }),
+      getToken,
+      through(checkNotBanned),
+      tokenToUser,
+    );
+    assertType<Equal<typeof ok1, Result<User, AuthError>>>();
+    expect(ok1).toEqual(ok({ mail: "a@b" }));
+
+    let called = false;
+    const ng1 = flow(
+      ok({ token: "banned@b" }),
+      getToken,
+      through(checkNotBanned),
+      (t) => {
+        called = true;
+        return tokenToUser(t);
+      },
+    );
+    expect(isErr(ng1) && ng1.error.message).toBe("banned");
+    expect(called).toBe(false);
+  });
+
+  it("through で増えるエラー型は fn が返す Failure の型だけ", () => {
+    const r = flow(
+      ok(1),
+      through((n: number) => (n > 0 ? ok() : err(new DbError("db")))),
+    );
+    assertType<Equal<typeof r, Result<number, DbError>>>();
+    const v = flow(
+      ok(1),
+      through((n: number) => n * 2),
+    ); // 値を返しても捨てる
+    assertType<Equal<typeof v, Result<number, never>>>();
+    expect(v).toEqual(ok(1));
+  });
+
+  it("Promise を返す関数は渡せない (型エラー)", () => {
+    // @ts-expect-error 非同期関数は throughAsync を使う
+    through(async (n: number) => n);
+  });
+});
+
+describe("throughAsync", () => {
+  it("flowAsync の中で非同期の処理を挟み、元の値を渡す", async () => {
+    const saved: string[] = [];
+    const save = async (t: string): ResultAsync<void, DbError> => {
+      saved.push(t);
+      return ok();
+    };
+    const p = flowAsync(
+      ok({ token: "a@b" }),
+      getToken,
+      throughAsync(save),
+      tokenToUser,
+    );
+    assertType<Equal<typeof p, ResultAsync<User, AuthError | DbError>>>();
+    expect(await p).toEqual(ok({ mail: "a@b" }));
+    expect(saved).toEqual(["a@b"]);
+  });
+
+  it("非同期の処理が Failure を返したらそこで止まる", async () => {
+    const fail = async (_: string): ResultAsync<void, DbError> =>
+      err(new DbError("db down"));
+    const r = await flowAsync(
+      ok({ token: "a@b" }),
+      getToken,
+      throughAsync(fail),
+      tokenToUser,
+    );
+    expect(isErr(r) && r.error.message).toBe("db down");
+  });
+});
+
+describe("andThrough", () => {
+  it("成功なら fn を実行して元の Result を返す", () => {
+    const seen: number[] = [];
+    const r = rslt.andThrough(ok(1), (n) => {
+      seen.push(n);
+    });
+    expect(r).toEqual(ok(1));
+    expect(seen).toEqual([1]);
+  });
+
+  it("fn が Failure を返したらその Failure、元が Failure なら fn を呼ばない", () => {
+    const src: Result<number, string> = ok(1);
+    const r = rslt.andThrough(src, (n) =>
+      n > 0 ? err(new DbError("db")) : ok(),
+    );
+    assertType<Equal<typeof r, Result<number, string | DbError>>>();
+    expect(isErr(r) && r.error).toBeInstanceOf(DbError);
+
+    let called = false;
+    rslt.andThrough(err("ng"), () => {
+      called = true;
+    });
+    expect(called).toBe(false);
   });
 });
