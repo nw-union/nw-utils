@@ -12,6 +12,7 @@ NWU のアプリケーションに使用する TypeScript ユーティリティ�
 - **Language**: TypeScript
 - **主要ライブラリ**:
   - `lib/rslt` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
+  - `lib/vo` (自前): 最小限のパーサーと VO 生成ヘルパー (外部依存なし)
   - `zod`: スキーマバリデーション
   - `ts-pattern`: パターンマッチング
 - **Linter/Formatter**: Biome
@@ -29,6 +30,11 @@ src/
 │   │   └── result.ts
 │   ├── uuid/                 # UUID 生成・変換ユーティリティ
 │   │   └── index.ts
+│   ├── valibot/              # valibot を使った VO ヘルパー
+│   │   └── index.ts
+│   ├── vo/                   # 自前のパーサー + VO ヘルパー
+│   │   ├── index.ts
+│   │   └── schema.ts
 │   └── zod/                  # Zod バリデーションヘルパー
 │       └── index.ts
 └── adapter/
@@ -123,6 +129,28 @@ export const newEmail = newType(email, "Email");
 const result = newEmail("test@example.com"); // Result<Email, ValidationError>
 ```
 
+#### Value Object ライブラリ (lib/vo/)
+
+外部依存のない最小限のパーサーと VO 生成ヘルパー。`lib/valibot` (valibot を使う版) から依存をなくし、関数型の書き味にしたもの。詳細は `src/lib/vo/README.md`。
+
+- パーサーはすべて `Parser<I, O> = (input: I) => Result<O, Issue>` という純粋な関数。`Schema<O> = Parser<unknown, O>`
+- 部品は `v` 経由で使う。引数のないものは値、引数があるものは関数
+  - 値: `string` / `number` / `boolean`, `nonEmpty` / `email`, `integer`
+  - 関数: `minLength(n)` / `maxLength(n)` / `length(n)` / `regex(re)`, `minValue(n)` / `maxValue(n)`
+  - 組み合わせ: `chain(p1, p2, ...)` (Kleisli 合成。最初の失敗で止まり、エラーは 1 件), `emptyAsNull(p)` (空文字列を `ok(null)` にする)
+- パーサーには brand を付けない。brand は `newVo` が付ける
+- 型: `Parser`, `Schema`, `Issue`, `InferOutput`, `Brand`, `InferVo`
+- VO ヘルパー: `newVo(type, schema)` (1 引数の `(src: unknown) => Result<T & Brand<type>, ValidationError>` を返す。null には brand を付けない), `withName(name)` (表示名を差し替える。`rslt.mapErr` 用)
+
+```typescript
+import { type InferVo, newVo, v } from "@nw-union/nw-utils/lib/vo";
+
+const email = v.chain(v.string, v.email);
+export const newEmail = newVo("Email", email);
+export type Email = InferVo<typeof newEmail>; // string & Brand<"Email">
+export const newOptionalEmail = newVo("Email", v.emptyAsNull(email)); // Email | null
+```
+
 ### アダプター
 
 #### Auth Mock (adapter/auth-mock/)
@@ -160,6 +188,8 @@ const result = await auth.auth(request); // Result<User, AuthError>
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
 - `@nw-union/nw-utils/lib/rslt` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
+- `@nw-union/nw-utils/lib/vo` - パーサー + VO ヘルパー (外部依存なし)
+- `@nw-union/nw-utils/lib/valibot` - valibot 用 VO ヘルパー
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
 - `@nw-union/nw-utils/adapter/auth-mock` - モック認証
 - `@nw-union/nw-utils/adapter/auth-cloudflare` - Cloudflare 認証
@@ -169,7 +199,7 @@ const result = await auth.auth(request); // Result<User, AuthError>
 ```bash
 bun run build        # TypeScript のビルド
 bun run check        # Biome による lint と format
-bun run gen          # lib/rslt の step / stepAsync / pipe のオーバーロードを再生成 (--check で差分確認)
+bun run gen          # lib/rslt の step / stepAsync / pipe と lib/vo の chain のオーバーロードを再生成 (--check で差分確認)
 ```
 
 ## 設計原則
