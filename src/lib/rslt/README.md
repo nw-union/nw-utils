@@ -105,6 +105,17 @@ const user = flow(
 const user2 = await flowAsync(ok(req), getToken, verifyToken, throughAsync(saveLog), toUser);
 ```
 
+失敗しても本筋に影響させたくない副作用 (ログなど) は `tee` で包みます。`through` のエラーを無視する版で、戻り値の Failure も、例外も Promise の reject も握りつぶし、直前の成功値をそのまま次に渡します (非同期の完了は待ちません)。
+
+```typescript
+const user = flow(
+  ok(req),
+  getToken,
+  tee((token) => logger.info(`token: ${token}`)), // 失敗しても無視
+  tokenToUser,
+);
+```
+
 - `flow` / `through` に Promise を返す関数を渡すと型エラーになります
 - 「`void` を返したら自動で素通り」にしないのは、実行時に `void` と `undefined` を区別できず、`User | undefined` を返す関数の結果を取り違えるためです
 
@@ -136,7 +147,7 @@ const r = rslt.pipe(
 );
 ```
 
-- **Through と Tee**: 失敗したら止めたい処理 (検証など) は Through、失敗しても本筋に影響させたくない副作用 (ログなど) は Tee を使います。Tee は `f` の例外も Promise の reject も握りつぶします (完了は待ちません)
+- **Through と Tee**: 失敗したら止めたい処理 (検証など) は Through、失敗しても本筋に影響させたくない副作用 (ログなど) は Tee を使います (flow では `through` / `tee`、pipe では `rslt.andThrough` / `rslt.andTee`)。Tee は `f` の例外も Promise の reject も握りつぶします (完了は待ちません)
 - `rslt.pipe` は Result 専用ではなく、引数を 1 つ受け取る関数なら何でも並べられます
 - `rslt.map(f)` を `rslt.pipe` の外で作るときは、引数の型を書きます: `const double = rslt.map((n: number) => n * 2)`
 
@@ -183,7 +194,7 @@ const auth = async (req: Request): ResultAsync<User, AuthError> => {
 
 ## 注意点
 
-- **例外**: `flow` / `through` / `andThrough` / `orThrough` に渡した関数の例外は Failure にならず、そのまま投げられます。例外を投げうる処理は `rslt.try` / `rslt.tryAsync` で Result にしてから渡してください (Tee だけは握りつぶします)
+- **例外**: `flow` / `through` / `andThrough` / `orThrough` に渡した関数の例外は Failure にならず、そのまま投げられます。例外を投げうる処理は `rslt.try` / `rslt.tryAsync` で Result にしてから渡してください (`tee` / `rslt.andTee` / `rslt.orTee` だけは握りつぶします)
 - **Result の判定**: `flow` は戻り値が Result かを `{ type: "Success", value }` / `{ type: "Failure", error }` という形で判定します。成功値としてこの形のデータを返すと Result として扱われます (型の推論も同じ扱い)
 - **関数の数**: `rslt.pipe` / `flow` / `flowAsync` につなげられる関数は最大 10 個です
 - **JSON**: `ok()` を JSON にすると `value` が消えて `{"type":"Success"}` になりますが、成功として扱えます。`JSON.parse` の結果は型が保証されないので、バリデーションしてから使ってください
