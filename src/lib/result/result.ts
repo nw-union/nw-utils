@@ -8,6 +8,10 @@ interface ResultMethods {
   isOk<T, E>(this: Result<T, E>): this is Success<T>;
   /** 失敗かどうか (型ガード) */
   isErr<T, E>(this: Result<T, E>): this is Failure<E>;
+  /** 成功値を取り出す。失敗の場合は error を throw する (主にテスト用) */
+  unwrap<T, E>(this: Result<T, E>): T;
+  /** エラーを取り出す。成功の場合は throw する (主にテスト用) */
+  unwrapError<T, E>(this: Result<T, E>): E;
 }
 
 /** 成功を表す値 */
@@ -39,13 +43,24 @@ type NotPromise<T> = T extends PromiseLike<unknown> ? never : unknown;
 const BRAND = Symbol.for("@nw-union/nw-utils/result");
 
 // すべての Result が共有するプロトタイプ。メソッドはここにだけ持つ
+type Self = { type: string; value?: unknown; error?: unknown };
 const proto = {
   [BRAND]: true,
-  isOk(this: { type: string }) {
+  isOk(this: Self) {
     return this.type === "Success";
   },
-  isErr(this: { type: string }) {
+  isErr(this: Self) {
     return this.type === "Failure";
+  },
+  unwrap(this: Self) {
+    if (this.type === "Failure") throw this.error;
+    return this.value;
+  },
+  unwrapError(this: Self) {
+    if (this.type === "Success") {
+      throw new Error("Called unwrapError on a Success");
+    }
+    return this.error;
   },
 } as const;
 
@@ -476,19 +491,3 @@ export async function flowAsync(
   }
   return cur;
 }
-
-// ----------------------------------------------------------------------------
-// 取り出し
-// ----------------------------------------------------------------------------
-
-/** 成功値を取り出す。失敗の場合は error を throw する (主にテスト用) */
-export const unwrap = <T, E>(r: Result<T, E>): T => {
-  if (r.isErr()) throw r.error;
-  return r.value;
-};
-
-/** エラーを取り出す。成功の場合は throw する (主にテスト用) */
-export const unwrapError = <T, E>(r: Result<T, E>): E => {
-  if (r.isOk()) throw new Error("Called unwrapError on a Success");
-  return r.error;
-};

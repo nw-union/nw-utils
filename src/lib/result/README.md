@@ -12,8 +12,8 @@ import { err, ok, Result } from "@nw-union/nw-utils/lib/result";
 
 ## 特徴
 
-- **neverthrow に近い書き味**: `ok(v)` / `err(e)` で作り、`r.isOk()` / `r.isErr()` で判定します
-- **クラスを使わない**: Result は `{ type, value }` / `{ type, error }` だけを持つ frozen object です。`isOk` / `isErr` は全 Result で共有する 1 つのプロトタイプにだけ置いています
+- **neverthrow に近い書き味**: `ok(v)` / `err(e)` で作り、`r.isOk()` / `r.isErr()` で判定し、`r.unwrap()` で取り出します
+- **クラスを使わない**: Result は `{ type, value }` / `{ type, error }` だけを持つ frozen object です。メソッド (`isOk` / `isErr` / `unwrap` / `unwrapError`) は全 Result で共有する 1 つのプロトタイプにだけ置いています
 - **同期関数のみ**: 変換関数 (`map` など) はすべて同期です。非同期は `flowAsync` か async/await で書きます
 - **data-first**: `Result.map(result, fn)` のように、Result を第 1 引数に取ります
 - **外部依存なし**: 実装は 1 ファイルです
@@ -21,8 +21,9 @@ import { err, ok, Result } from "@nw-union/nw-utils/lib/result";
 ## 型
 
 ```typescript
-type Success<T> = { readonly type: "Success"; readonly value: T } & { isOk(); isErr() };
-type Failure<E> = { readonly type: "Failure"; readonly error: E } & { isOk(); isErr() };
+type Success<T> = { readonly type: "Success"; readonly value: T } & ResultMethods;
+type Failure<E> = { readonly type: "Failure"; readonly error: E } & ResultMethods;
+// ResultMethods: isOk() / isErr() / unwrap() / unwrapError()
 
 type Result<T, E> = Success<T> | Failure<E>;
 type ResultAsync<T, E> = Promise<Result<T, E>>;
@@ -174,14 +175,14 @@ const r = await Result.flowAsync(
 
 | 関数 | 説明 |
 | --- | --- |
-| `unwrap(r)` | 成功値を取り出す。失敗なら `error` を throw する |
-| `unwrapError(r)` | エラーを取り出す。成功なら throw する |
+| `r.unwrap()` | 成功値を取り出す。失敗なら `error` を throw する |
+| `r.unwrapError()` | エラーを取り出す。成功なら throw する |
 
 throw するので、主にテストで使います。アプリケーションコードでは `r.isOk()` / `r.isErr()` で分岐してください。
 
 ```typescript
-expect(Result.unwrap(newEmail("a@example.com"))).toBe("a@example.com");
-expect(Result.unwrapError(newEmail("invalid")).code).toBe("Validation Error");
+expect(newEmail("a@example.com").unwrap()).toBe("a@example.com");
+expect(newEmail("invalid").unwrapError().code).toBe("Validation Error");
 ```
 
 ## 非同期処理の書き方
@@ -230,7 +231,7 @@ const message = match(result)
 | `r.orElse(f)` | `Result.pipe(r, Result.orElse(f))` | `Result.orElse(r, f)` |
 | `Result.fromThrowable(fn, onErr)()` | `Result.try({ try, catch })` | `Result.try(fn, onError)` |
 | `ResultAsync.fromPromise(p, onErr)` | `Result.try({ try, catch })` | `Result.tryAsync(fn, onError)` |
-| `r._unsafeUnwrap()` | `Result.unwrap(r)` | `Result.unwrap(r)` |
-| `r._unsafeUnwrapErr()` | `Result.unwrapError(r)` | `Result.unwrapError(r)` |
+| `r._unsafeUnwrap()` | `Result.unwrap(r)` | `r.unwrap()` |
+| `r._unsafeUnwrapErr()` | `Result.unwrapError(r)` | `r.unwrapError()` |
 | `ok(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `Result.flow(r, f, g)` |
 | `okAsync(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `Result.flowAsync(r, f, g)` |

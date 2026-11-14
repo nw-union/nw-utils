@@ -77,7 +77,7 @@ AppError (基底クラス)
 - 生成: `ok`, `err`, `try` (同期), `tryAsync` (非同期)
 - 判定: `r.isOk()`, `r.isErr()` (型ガード)
 - 変換: `map`, `mapError`, `andThen`, `orElse` (すべて同期・data-first)
-- 取り出し: `unwrap`, `unwrapError` (失敗時は throw。主にテスト用)
+- 取り出し: `r.unwrap()`, `r.unwrapError()` (失敗時は throw。主にテスト用)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
 
 非同期の合成は `flowAsync`、または async/await で書く:

@@ -146,12 +146,17 @@ describe("try / tryAsync", () => {
 
 describe("unwrap / unwrapError", () => {
   it("値を取り出す", () => {
-    expect(Result.unwrap(ok1)).toBe(1);
-    expect(Result.unwrapError(ng)).toBe("ng");
+    expect(ok1.unwrap()).toBe(1);
+    expect(ng.unwrapError()).toBe("ng");
+  });
+  it("型は呼び出した Result から決まる", () => {
+    const v: number = ok1.unwrap();
+    const e: string = ng.unwrapError();
+    expect([v, e]).toEqual([1, "ng"]);
   });
   it("逆側は throw する", () => {
-    expect(() => Result.unwrap(Result.err(new Error("x")))).toThrow("x");
-    expect(() => Result.unwrapError(ok1)).toThrow();
+    expect(() => Result.err(new Error("x")).unwrap()).toThrow("x");
+    expect(() => ok1.unwrapError()).toThrow();
   });
 });
 
@@ -210,7 +215,7 @@ describe("flow", () => {
         return saveUser(u);
       },
     );
-    expect(Result.unwrapError(r).message).toBe("no token");
+    expect(r.unwrapError().message).toBe("no token");
     expect(calls).toEqual([]);
   });
 
@@ -295,7 +300,7 @@ describe("flowAsync", () => {
         return tokenToUser(mail);
       },
     );
-    expect(Result.unwrapError(r).message).toBe("invalid");
+    expect(r.unwrapError().message).toBe("invalid");
     expect(called).toBe(false);
   });
 
