@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { isErr, type Result } from "../result/index.js";
 import { fromShortUuid, toShortUuid, uuidv4 } from "./index.js";
+
+// テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
+const unwrap = <T, E>(r: Result.Result<T, E>): T => {
+  if (isErr(r))
+    throw new Error(`expected Success but got Failure: ${String(r.error)}`);
+  return r.value;
+};
 
 describe("uuidv4", () => {
   it("有効なUUID v4文字列を生成できること", () => {
@@ -49,14 +57,14 @@ describe("uuidv4", () => {
 describe("toShortUuid / fromShortUuid", () => {
   it("UUID を 22文字のURLセーフ文字列に短縮できること", () => {
     const uuid = uuidv4();
-    const short = toShortUuid(uuid)._unsafeUnwrap();
+    const short = unwrap(toShortUuid(uuid));
     expect(short).toMatch(/^[A-Za-z0-9_-]{22}$/);
   });
 
   it("短縮文字列から元のUUIDに復元できること", () => {
     const uuid = uuidv4();
-    const short = toShortUuid(uuid)._unsafeUnwrap();
-    const restored = fromShortUuid(short)._unsafeUnwrap();
+    const short = unwrap(toShortUuid(uuid));
+    const restored = unwrap(fromShortUuid(short));
     expect(restored.toLowerCase()).toBe(uuid.toLowerCase());
   });
 
@@ -64,7 +72,7 @@ describe("toShortUuid / fromShortUuid", () => {
     const count = 200;
     const set = new Set<string>();
     for (let i = 0; i < count; i++) {
-      const short = toShortUuid(uuidv4())._unsafeUnwrap();
+      const short = unwrap(toShortUuid(uuidv4()));
       expect(short).toMatch(/^[A-Za-z0-9_-]{22}$/);
       set.add(short);
     }
@@ -73,9 +81,9 @@ describe("toShortUuid / fromShortUuid", () => {
 
   it("ゼロUUIDの既知ケースでも期待通りになること", () => {
     const zero = "00000000-0000-0000-0000-000000000000";
-    const short = toShortUuid(zero)._unsafeUnwrap();
+    const short = unwrap(toShortUuid(zero));
     expect(short).toBe("AAAAAAAAAAAAAAAAAAAAAA");
-    const restored = fromShortUuid(short)._unsafeUnwrap();
+    const restored = unwrap(fromShortUuid(short));
     expect(restored).toBe(zero);
   });
 });
