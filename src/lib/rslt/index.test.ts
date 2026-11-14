@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import { match } from "ts-pattern";
-import * as rslt from "./index.js";
 import {
   collect,
   collectAsync,
@@ -12,6 +11,7 @@ import {
   ok,
   type Result,
   type ResultAsync,
+  rslt,
   sequence,
   sequenceAsync,
 } from "./index.js";
@@ -28,6 +28,13 @@ describe("ok / err", () => {
 });
 
 describe("Result の値", () => {
+  it("rslt からも同じ関数を使える", () => {
+    expect(rslt.ok).toBe(ok);
+    expect(rslt.sequence).toBe(sequence);
+    expect(typeof rslt.map).toBe("function");
+    expect(typeof rslt.try).toBe("function");
+  });
+
   it("frozen なので書き換えられない", () => {
     const r = ok(1);
     expect(Object.isFrozen(r)).toBe(true);

@@ -5,20 +5,19 @@
 例外を投げる代わりに「成功」か「失敗」かを値として返し、エラーを型で明示的に扱えるようにします。
 
 ```typescript
-import * as rslt from "@nw-union/nw-utils/lib/rslt";
-import { err, isErr, ok, type Result } from "@nw-union/nw-utils/lib/rslt";
+import { err, isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt";
 
 const r: Result<number, Error> = rslt.map(ok(1), (n) => n + 1);
 ```
 
 - よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型) は名前で import します
-- それ以外 (`map` / `mapError` / `andThen` / `orElse` / `try` / `tryAsync` など) は `import * as rslt` して `rslt.map` のように使います。`map` のような一般的な名前を直接 import すると利用側の名前とぶつかりやすく、`try` は予約語なので単独の名前としては import できないためです
+- それ以外 (`map` / `mapError` / `andThen` / `orElse` / `try` / `tryAsync` など) は `rslt` を import して `rslt.map` のように使います。`map` のような一般的な名前を直接 import すると利用側の名前とぶつかりやすく、`try` は予約語なので単独の名前としては import できないためです
 
 ## 特徴
 
 - **neverthrow に近い名前**: `ok(v)` / `err(e)` で作り、`isOk(r)` / `isErr(r)` で判定します
 - **plain object**: Result はクラスではなく、`{ type, value }` / `{ type, error }` だけを持つ frozen object です。スプレッドや JSON への変換をしてもデータとして扱えます
-- **tree-shaking が効く**: すべて独立した関数として export しているので、import した関数 (と、その関数が内部で使う関数) だけがバンドルに入ります。`import * as rslt` して `rslt.map` のように使っても同じです。`ok` と `isOk` だけなら 113 bytes、全部入りでも約 1.8KB (minify 後)
+- **tree-shaking が効く**: すべて独立した関数として export しているので、import した関数 (と、その関数が内部で使う関数) だけがバンドルに入ります。`rslt.map` のように `rslt` 経由で使っても同じです。`ok` と `isOk` だけなら 113 bytes、全部入りでも約 1.8KB (minify 後)
 - **同期関数のみ**: 変換関数 (`rslt.map` など) はすべて同期です。非同期は `flowAsync` か async/await で書きます
 - **data-first**: `rslt.map(result, fn)` のように、Result を第 1 引数に取ります
 - **外部依存なし**: 実装は 1 ファイルです
