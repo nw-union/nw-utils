@@ -678,6 +678,36 @@ describe("through", () => {
     // @ts-expect-error 非同期関数は throughAsync を使う
     through(async (n: number) => n);
   });
+
+  it("引数の型が広い関数を渡しても、次に渡る値の型は広がらない", () => {
+    const seen: unknown[] = [];
+    const logAny = (v: unknown) => {
+      seen.push(v);
+    };
+    const check = (v: number | string): Result<void, DbError> =>
+      v === "" ? err(new DbError("empty")) : ok();
+    const r = step(
+      ok(1),
+      through(logAny),
+      through(check),
+      (n) => n + 1, // n は number のまま
+    );
+    assertType<Equal<typeof r, Result<number, DbError>>>();
+    expect(r).toEqual(ok(2));
+    expect(seen).toEqual([1]);
+  });
+
+  it("直前の成功値を受け取れない関数は渡せない (型エラー)", () => {
+    const needString = (_: string) => {};
+    // @ts-expect-error number を string の引数に渡せない
+    step(ok(1), through(needString));
+  });
+
+  it("step の外で単体で作るときは型引数を書く", () => {
+    const f = through<number, void>(() => {});
+    assertType<Equal<typeof f, (v: number) => Result<number, never>>>();
+    expect(f(1)).toEqual(ok(1));
+  });
 });
 
 describe("tee", () => {
@@ -743,6 +773,18 @@ describe("tee", () => {
     );
     expect(r).toEqual(ok(1));
   });
+
+  it("引数の型が広い関数を渡しても、次に渡る値の型は広がらない", () => {
+    const seen: unknown[] = [];
+    const r = step(
+      ok({ id: 1 }),
+      tee((v: unknown) => seen.push(v)),
+      (v) => v.id, // v は { id: number } のまま
+    );
+    assertType<Equal<typeof r, Result<number, never>>>();
+    expect(r).toEqual(ok(1));
+    expect(seen).toEqual([{ id: 1 }]);
+  });
 });
 
 describe("throughAsync", () => {
@@ -773,6 +815,32 @@ describe("throughAsync", () => {
       tokenToUser,
     );
     expect(isErr(r) && r.error.message).toBe("db down");
+  });
+
+  it("引数の型が広い非同期関数を渡しても、次に渡る値の型は広がらない", async () => {
+    const seen: unknown[] = [];
+    const logAny = async (v: unknown): Promise<void> => {
+      seen.push(v);
+    };
+    const p = stepAsync(
+      ok({ token: "a@b" }),
+      getToken,
+      throughAsync(logAny),
+      tokenToUser, // string のまま渡る
+    );
+    assertType<Equal<typeof p, ResultAsync<User, AuthError>>>();
+    expect(await p).toEqual(ok({ mail: "a@b" }));
+    expect(seen).toEqual(["a@b"]);
+  });
+
+  it("ラムダで書くと、引数に直前の成功値の型が付く", async () => {
+    const p = stepAsync(
+      ok({ id: 1 }),
+      throughAsync(async (v) => (v.id > 0 ? ok() : err(new DbError("db")))),
+      (v) => v.id,
+    );
+    assertType<Equal<typeof p, ResultAsync<number, DbError>>>();
+    expect(await p).toEqual(ok(1));
   });
 });
 
