@@ -5,11 +5,11 @@
  *
  * @example
  * ```typescript
- * import { newType, v } from "@nw-union/nw-utils/lib/vo";
+ * import { newVo, v } from "@nw-union/nw-utils/lib/vo";
  *
  * const email = v.pipe(v.string(), v.email(), v.brand("Email"));
  * export type Email = v.InferOutput<typeof email>;
- * export const newEmail = newType(email, "Email");
+ * export const newEmail = newVo(email, "Email");
  * ```
  */
 import { ValidationError } from "../../error.js";
@@ -22,7 +22,7 @@ export type { Brand, InferOutput, Issue, Schema, Step } from "./schema.js";
 export * as v from "./schema.js";
 
 /**
- * newType は, ValueObjectを生成関数を作成するためのヘルパー関数
+ * newVo は, Value Object の生成関数を作るヘルパー関数
  *
  * @param schema スキーマ
  * @param type VOの型名
@@ -32,14 +32,14 @@ export * as v from "./schema.js";
  * // Email VO の定義
  * const email = v.pipe(v.string(), v.email(), v.brand("Email"));
  * export type Email = v.InferOutput<typeof email>;
- * export const newEmail = newType(email, "Email");
+ * export const newEmail = newVo(email, "Email");
  *
  * // 使用方法
  * const result1 = newEmail(str); // VO の生成
  * const result2 = newEmail(str, "userEmail"); // エラーに userEmail と表示する場合
  * ```
  */
-export const newType =
+export const newVo =
   <S extends Schema<unknown>>(schema: S, type: string) =>
   (src: unknown, name?: string): Result<InferOutput<S>, ValidationError> => {
     const r = schema(src);
@@ -51,7 +51,7 @@ export const newType =
 /**
  * newVoOrNone は, 空文字列を null として扱う ValueObject 生成関数を作成するためのヘルパー関数
  *
- * 入力が空文字列 (`""`) の場合は `ok(null)` を返し、それ以外は `newType` に委譲する。
+ * 入力が空文字列 (`""`) の場合は `ok(null)` を返し、それ以外は `newVo` に委譲する。
  * フォーム入力など、未入力を null で表現したい任意フィールドに適している。
  *
  * @param schema スキーマ
@@ -71,7 +71,7 @@ export const newVoOrNone = <S extends Schema<unknown>>(
   schema: S,
   type: string,
 ) => {
-  const f = newType(schema, type);
+  const f = newVo(schema, type);
   return (
     src: unknown,
     name?: string,

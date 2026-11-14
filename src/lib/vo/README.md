@@ -2,14 +2,14 @@
 
 外部依存のない、最小限のスキーマバリデーションライブラリです。
 
-valibot と同じ名前・同じ書き方でスキーマを作り、`newType` で Value Object の生成関数に変換します。結果は `lib/rslt` の `Result` で返ります。valibot を使う `lib/valibot` から、valibot への依存をなくしたものです。
+valibot と同じ名前・同じ書き方でスキーマを作り、`newVo` で Value Object の生成関数に変換します。結果は `lib/rslt` の `Result` で返ります。valibot を使う `lib/valibot` から、valibot への依存をなくしたものです。
 
 ```typescript
-import { newType, v } from "@nw-union/nw-utils/lib/vo";
+import { newVo, v } from "@nw-union/nw-utils/lib/vo";
 
 const email = v.pipe(v.string(), v.email(), v.brand("Email"));
 export type Email = v.InferOutput<typeof email>;
-export const newEmail = newType(email, "Email");
+export const newEmail = newVo(email, "Email");
 
 newEmail("a@example.com"); // { type: "Success", value: "a@example.com" }
 newEmail("invalid"); // { type: "Failure", error: ValidationError }
@@ -110,13 +110,13 @@ const r2 = age("20"); // { type: "Failure", error: [{ message: 'Invalid type: Ex
 
 | 関数 | 説明 |
 | --- | --- |
-| `newType(schema, type)` | `(src: unknown, name?: string) => Result<T, ValidationError>` を返します |
-| `newVoOrNone(schema, type)` | `newType` と同じですが、空文字列 `""` は `ok(null)` を返します。フォームの任意項目向けです |
+| `newVo(schema, type)` | `(src: unknown, name?: string) => Result<T, ValidationError>` を返します |
+| `newVoOrNone(schema, type)` | `newVo` と同じですが、空文字列 `""` は `ok(null)` を返します。フォームの任意項目向けです |
 
 ```typescript
 const email = v.pipe(v.string(), v.email(), v.brand("Email"));
 export type Email = v.InferOutput<typeof email>;
-export const newEmail = newType(email, "Email");
+export const newEmail = newVo(email, "Email");
 export const newOptionalEmail = newVoOrNone(email, "Email");
 
 newEmail("a@example.com"); // ok(Email)
@@ -152,10 +152,15 @@ error.details; // ['userEmail: Invalid email: Received "invalid"']
 ```diff
 - import * as v from "valibot";
 - import { newType } from "@nw-union/nw-utils/lib/valibot";
-+ import { newType, v } from "@nw-union/nw-utils/lib/vo";
++ import { newVo, v } from "@nw-union/nw-utils/lib/vo";
 ```
 
-`newType` / `newVoOrNone` の引数と戻り値、`ValidationError` の `message` / `details` の形は `lib/valibot` と同じです。
+`newType` は `newVo` に名前が変わります。引数と戻り値、`ValidationError` の `message` / `details` の形は `lib/valibot` の `newType` / `newVoOrNone` と同じです。
+
+```diff
+- export const newEmail = newType(email, "Email");
++ export const newEmail = newVo(email, "Email");
+```
 
 次の点は valibot と違います。
 

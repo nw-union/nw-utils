@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { isErr, type Result } from "../rslt/index.js";
-import { newType, newVoOrNone, v } from "./index.js";
+import { newVo, newVoOrNone, v } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
 const unwrap = <T, E>(r: Result<T, E>): T => {
@@ -15,9 +15,9 @@ const unwrapErr = <T, E>(r: Result<T, E>): E => {
 
 const emailSchema = v.pipe(v.string(), v.email(), v.brand("Email"));
 type Email = v.InferOutput<typeof emailSchema>;
-const newEmail = newType(emailSchema, "Email");
+const newEmail = newVo(emailSchema, "Email");
 
-describe("newType", () => {
+describe("newVo", () => {
   describe("成功ケース", () => {
     it("有効な値の場合 ok を返すこと", () => {
       const result = newEmail("test@example.com");
@@ -85,7 +85,7 @@ describe("newType", () => {
 
   describe("数値スキーマ", () => {
     const ageSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(150));
-    const newAge = newType(ageSchema, "Age");
+    const newAge = newVo(ageSchema, "Age");
 
     it("有効な数値の場合 ok を返すこと", () => {
       const result = newAge(25);

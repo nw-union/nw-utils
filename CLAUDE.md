@@ -135,14 +135,14 @@ valibot に依存せず、valibot と同じ書き方でスキーマを作る最�
 - スキーマ・検証はすべて `Step<I, O> = (input: I) => Result<O, Issue[]>` という関数
 - 部品は `v` 経由で使う: `string` / `number` / `boolean`, `minLength` / `maxLength` / `length` / `nonEmpty` / `regex` / `email`, `minValue` / `maxValue` / `integer`, `pipe` (最初の失敗で止まる) / `brand`, `parse`
 - 型: `Schema`, `Step`, `Issue`, `InferOutput`, `Brand`
-- VO ヘルパー: `newType(schema, type)`, `newVoOrNone(schema, type)` (空文字列を `ok(null)` にする)
+- VO ヘルパー: `newVo(schema, type)`, `newVoOrNone(schema, type)` (空文字列を `ok(null)` にする)
 
 ```typescript
-import { newType, v } from "@nw-union/nw-utils/lib/vo";
+import { newVo, v } from "@nw-union/nw-utils/lib/vo";
 
 const email = v.pipe(v.string(), v.email(), v.brand("Email"));
 export type Email = v.InferOutput<typeof email>;
-export const newEmail = newType(email, "Email");
+export const newEmail = newVo(email, "Email");
 ```
 
 ### アダプター

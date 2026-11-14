@@ -17,7 +17,7 @@ export type Issue = { readonly message: string };
 /** I を受け取り、O か Issue[] を返す 1 ステップ (スキーマ・検証・変換の共通の形) */
 export type Step<I, O> = (input: I) => Result<O, Issue[]>;
 
-/** unknown を受け取れる Step。newType などに渡すのはこれ */
+/** unknown を受け取れる Step。newVo などに渡すのはこれ */
 export type Schema<O> = Step<unknown, O>;
 
 /** Step の出力の型 */
