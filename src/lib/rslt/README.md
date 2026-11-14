@@ -30,7 +30,7 @@ type Result<T, E> = Success<T> | Failure<E>;
 type ResultAsync<T, E> = Promise<Result<T, E>>;
 ```
 
-Result はクラスではなく、書き換え不可 (frozen) の普通のオブジェクトです。JSON にしたり、`ts-pattern` で `match(r).with({ type: "Success" }, ...)` と分岐したりできます。
+Result はクラスではなく、書き換え不可 (frozen) の普通のオブジェクトです。JSON にしたり、`ts-pattern` でそのまま分岐したりできます。
 
 ## 作る
 
@@ -61,24 +61,42 @@ const toUser = (r: Result<string, AuthError>): Result<User, AuthError> => {
 };
 ```
 
+### ts-pattern で値に変える
+
+Result を最後に値 (レスポンス、メッセージなど) へ変えるときは、`ts-pattern` の `match` を使います。このライブラリに `match` / `fold` はありません。
+
+```typescript
+import { match, P } from "ts-pattern";
+
+const status = match(findUser(id)) // Result<User, NotFoundError | ForbiddenError>
+  .with({ type: "Success" }, ({ value }) => json(value, 200))
+  .with({ type: "Failure", error: P.instanceOf(NotFoundError) }, () => json(null, 404))
+  .with({ type: "Failure", error: P.instanceOf(ForbiddenError) }, () => json(null, 403))
+  .exhaustive();
+```
+
+- `exhaustive()` を付けると、`Success` / `Failure` やエラーのクラスの分岐を書き忘れたときに型エラーになります
+- `value` / `error` の中身でも分岐できます (`{ type: "Success", value: { role: "admin" } }` など)
+- `rslt.pipe` の最後に `(r) => match(r)...exhaustive()` を置けば、変換から値への変換までを 1 つの式で書けます
+
 ## つなげる
 
 つなげ方は 2 通りあります。
 
-| | `flow` / `flowAsync` | `rslt.pipe` |
+| | `step` / `stepAsync` | `rslt.pipe` |
 | --- | --- | --- |
 | 並べる関数 | **成功値を受け取る**普通の関数 | `rslt.map(f)` など、**Result を受け取る**関数 |
 | `map` / `andThen` の区別 | 戻り値が Result かどうかで自動 | 明示する |
 | 失敗側の処理 (`mapErr` など) | 書けない | 途中に書ける |
-| 非同期 | `flowAsync` | なし |
+| 非同期 | `stepAsync` | なし |
 
 ```typescript
 // 同じ処理を 2 通りで書く
-flow(ok(req), getToken, tokenToUser);
+step(ok(req), getToken, tokenToUser);
 rslt.pipe(ok(req), rslt.andThen(getToken), rslt.map(tokenToUser));
 ```
 
-### flow / flowAsync
+### step / stepAsync
 
 普通の関数をそのまま並べます。各関数には直前の**成功値**が渡ります。
 
@@ -93,7 +111,7 @@ rslt.pipe(ok(req), rslt.andThen(getToken), rslt.map(tokenToUser));
 // checkNotRevoked: (token: string) => Result<void, AuthError>
 // tokenToUser:     (token: string) => User
 
-const user = flow(
+const user = step(
   ok(req),
   getToken,
   through(checkNotRevoked),
@@ -101,14 +119,14 @@ const user = flow(
 );
 // user: Result<User, AuthError>
 
-// 非同期の関数を含むなら flowAsync / throughAsync。必ず Promise を返す
-const user2 = await flowAsync(ok(req), getToken, verifyToken, throughAsync(saveLog), toUser);
+// 非同期の関数を含むなら stepAsync / throughAsync。必ず Promise を返す
+const user2 = await stepAsync(ok(req), getToken, verifyToken, throughAsync(saveLog), toUser);
 ```
 
 失敗しても本筋に影響させたくない副作用 (ログなど) は `tee` で包みます。`through` のエラーを無視する版で、戻り値の Failure も、例外も Promise の reject も握りつぶし、直前の成功値をそのまま次に渡します (非同期の完了は待ちません)。
 
 ```typescript
-const user = flow(
+const user = step(
   ok(req),
   getToken,
   tee((token) => logger.info(`token: ${token}`)), // 失敗しても無視
@@ -116,8 +134,20 @@ const user = flow(
 );
 ```
 
-- `flow` / `through` に Promise を返す関数を渡すと型エラーになります
+- `step` / `through` に Promise を返す関数を渡すと型エラーになります
 - 「`void` を返したら自動で素通り」にしないのは、実行時に `void` と `undefined` を区別できず、`User | undefined` を返す関数の結果を取り違えるためです
+
+> [!NOTE]
+> **`step` は書き心地を優先し、関数型の法則 (Functor / Monad の法則) を満たしません。**
+> 戻り値が Result なら自動で平らにする (`andThen` 扱い) ため、JavaScript の `Promise.then` と同じく、`Result<Result<T, E>, F>` のような Result の入れ子を作れません。
+>
+> ```typescript
+> const wrap = (n: number) => ok(n);
+> rslt.pipe(ok(1), rslt.map(wrap)); // ok(ok(1))  … map は法則どおり、包んだまま返す
+> step(ok(1), wrap);                // ok(1)      … step は自動で平らにする
+> ```
+>
+> 入れ子の Result を扱う場合や、`map` と `andThen` を厳密に区別したい場合は、`rslt.pipe` と `rslt.map` / `rslt.andThen` を使ってください。
 
 ### rslt.pipe
 
@@ -147,7 +177,7 @@ const r = rslt.pipe(
 );
 ```
 
-- **Through と Tee**: 失敗したら止めたい処理 (検証など) は Through、失敗しても本筋に影響させたくない副作用 (ログなど) は Tee を使います (flow では `through` / `tee`、pipe では `rslt.andThrough` / `rslt.andTee`)。Tee は `f` の例外も Promise の reject も握りつぶします (完了は待ちません)
+- **Through と Tee**: 失敗したら止めたい処理 (検証など) は Through、失敗しても本筋に影響させたくない副作用 (ログなど) は Tee を使います (step では `through` / `tee`、pipe では `rslt.andThrough` / `rslt.andTee`)。Tee は `f` の例外も Promise の reject も握りつぶします (完了は待ちません)
 - `rslt.pipe` は Result 専用ではなく、引数を 1 つ受け取る関数なら何でも並べられます
 - `rslt.map(f)` を `rslt.pipe` の外で作るときは、引数の型を書きます: `const double = rslt.map((n: number) => n * 2)`
 
@@ -174,11 +204,11 @@ await sequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
 変換関数 (`rslt.map` など) は同期の Result だけを受け取ります。非同期は次のどれかで書きます。
 
 ```typescript
-// 1. flowAsync でつなげる
-const r1 = await flowAsync(ok(req), getToken, verifyToken, toUser);
+// 1. stepAsync でつなげる
+const r1 = await stepAsync(ok(req), getToken, verifyToken, toUser);
 
-// 2. flowAsync の結果に、失敗側の処理を rslt.pipe で続ける
-const r2 = rslt.pipe(await flowAsync(ok(req), getToken, verifyToken), rslt.mapErr(toAppError));
+// 2. stepAsync の結果に、失敗側の処理を rslt.pipe で続ける
+const r2 = rslt.pipe(await stepAsync(ok(req), getToken, verifyToken), rslt.mapErr(toAppError));
 
 // 3. async 関数の中で isErr による早期 return
 const auth = async (req: Request): ResultAsync<User, AuthError> => {
@@ -194,9 +224,9 @@ const auth = async (req: Request): ResultAsync<User, AuthError> => {
 
 ## 注意点
 
-- **例外**: `flow` / `through` / `andThrough` / `orThrough` に渡した関数の例外は Failure にならず、そのまま投げられます。例外を投げうる処理は `rslt.try` / `rslt.tryAsync` で Result にしてから渡してください (`tee` / `rslt.andTee` / `rslt.orTee` だけは握りつぶします)
-- **Result の判定**: `flow` は戻り値が Result かを `{ type: "Success", value }` / `{ type: "Failure", error }` という形で判定します。成功値としてこの形のデータを返すと Result として扱われます (型の推論も同じ扱い)
-- **関数の数**: `rslt.pipe` / `flow` / `flowAsync` につなげられる関数は最大 10 個です
+- **例外**: `step` / `through` / `andThrough` / `orThrough` に渡した関数の例外は Failure にならず、そのまま投げられます。例外を投げうる処理は `rslt.try` / `rslt.tryAsync` で Result にしてから渡してください (`tee` / `rslt.andTee` / `rslt.orTee` だけは握りつぶします)
+- **Result の判定**: `step` は戻り値が Result かを `{ type: "Success", value }` / `{ type: "Failure", error }` という形で判定します。成功値としてこの形のデータを返すと Result として扱われます (型の推論も同じ扱い)
+- **関数の数**: `rslt.pipe` / `step` / `stepAsync` につなげられる関数は最大 10 個です
 - **JSON**: `ok()` を JSON にすると `value` が消えて `{"type":"Success"}` になりますが、成功として扱えます。`JSON.parse` の結果は型が保証されないので、バリデーションしてから使ってください
 - **freeze のコスト**: Result は作るたびに `Object.freeze` します。大量の Result をループで作る処理 (CSV の全行の検証など) ではわずかにコストがかかります
 

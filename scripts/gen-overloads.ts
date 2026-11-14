@@ -1,16 +1,16 @@
 /**
- * src/lib/rslt/result.ts の flow / flowAsync / pipe のオーバーロードを生成する
+ * src/lib/rslt/result.ts の step / stepAsync / pipe のオーバーロードを生成する
  *
  * - `bun run gen`        : 生成してファイルを書き換える
  * - `bun run gen --check`: 生成結果とファイルが一致するか確認する (不一致なら exit 1)
  *
- * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync / pipe も同様)
+ * 生成範囲は `// <generated:step>` 〜 `// </generated:step>` (stepAsync / pipe も同様)
  */
 const FILE = "src/lib/rslt/result.ts";
 const MAX = 10; // つなげられる関数の最大数
 
-const overloads = (name: "flow" | "flowAsync"): string => {
-  const isAsync = name === "flowAsync";
+const overloads = (name: "step" | "stepAsync"): string => {
+  const isAsync = name === "stepAsync";
   const lines: string[] = [];
   for (let n = 1; n <= MAX; n++) {
     const bs = Array.from({ length: n }, (_, i) => `B${i + 1}`);
@@ -74,7 +74,7 @@ const format = (src: string): string => {
 
 const current = await Bun.file(FILE).text();
 let next = current;
-for (const name of ["flow", "flowAsync"] as const) {
+for (const name of ["step", "stepAsync"] as const) {
   next = replaceBlock(next, name, overloads(name));
 }
 next = replaceBlock(next, "pipe", pipeOverloads());
@@ -83,7 +83,7 @@ next = format(next);
 if (process.argv.includes("--check")) {
   if (next !== current) {
     console.error(
-      `${FILE} の flow / flowAsync のオーバーロードが古い。bun run gen を実行すること`,
+      `${FILE} の step / stepAsync のオーバーロードが古い。bun run gen を実行すること`,
     );
     process.exit(1);
   }
