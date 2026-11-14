@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { isErr, type Result } from "../rslt/index.js";
-import { newVo, newVoOrNone, v } from "./index.js";
+import { ValidationError } from "../../error.js";
+import { isErr, type Result, rslt } from "../rslt/index.js";
+import { newVo, v, withName } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
 const unwrap = <T, E>(r: Result<T, E>): T => {
@@ -13,179 +14,108 @@ const unwrapErr = <T, E>(r: Result<T, E>): E => {
   return r.error;
 };
 
-const emailSchema = v.pipe(v.string(), v.email(), v.brand("Email"));
-type Email = v.InferOutput<typeof emailSchema>;
-const newEmail = newVo(emailSchema, "Email");
+const email = v.chain(v.string, v.email, v.brand("Email"));
+type Email = v.InferOutput<typeof email>;
+const newEmail = newVo(email, "Email");
 
 describe("newVo", () => {
-  describe("成功ケース", () => {
-    it("有効な値の場合 ok を返すこと", () => {
-      const result = newEmail("test@example.com");
-
-      expect(isErr(result)).toBe(false);
-      expect<string>(unwrap(result)).toBe("test@example.com");
-    });
-
-    it("型が付与された値を返すこと", () => {
-      const result = newEmail("user@example.com");
-      const value: Email = unwrap(result);
-
-      expect<string>(value).toBe("user@example.com");
-    });
+  it("有効な値なら ok を返し、brand 付きの型になる", () => {
+    const value: Email = unwrap(newEmail("test@example.com"));
+    expect<string>(value).toBe("test@example.com");
   });
 
-  describe("失敗ケース", () => {
-    it("無効な値の場合 err を返すこと", () => {
-      const result = newEmail("invalid-email");
-
-      expect(isErr(result)).toBe(true);
-    });
-
-    it("エラーが ValidationError であること", () => {
-      const result = newEmail("invalid-email");
-
-      expect(unwrapErr(result).code).toBe("Validation Error");
-    });
-
-    it("エラーメッセージに type 名が含まれること", () => {
-      const result = newEmail("invalid-email");
-      const error = unwrapErr(result);
-
-      expect(error.message).toBe("Email is invalid. ( type: Email )");
-    });
-
-    it("details にバリデーションエラー内容が含まれること", () => {
-      const result = newEmail("invalid-email");
-      const error = unwrapErr(result);
-
-      expect(error.details.length).toBeGreaterThan(0);
-      expect(error.details[0]).toMatch(/^Email:/);
-    });
-
-    it("name を指定した場合エラーメッセージに name が使われること", () => {
-      const result = newEmail("invalid-email", "userEmail");
-      const error = unwrapErr(result);
-
-      expect(error.message).toBe("userEmail is invalid. ( type: Email )");
-      expect(error.details[0]).toMatch(/^userEmail:/);
-    });
-
-    it("null を渡した場合も err を返すこと", () => {
-      const result = newEmail(null);
-
-      expect(isErr(result)).toBe(true);
-    });
-
-    it("undefined を渡した場合も err を返すこと", () => {
-      const result = newEmail(undefined);
-
-      expect(isErr(result)).toBe(true);
-    });
-  });
-
-  describe("数値スキーマ", () => {
-    const ageSchema = v.pipe(v.number(), v.minValue(0), v.maxValue(150));
-    const newAge = newVo(ageSchema, "Age");
-
-    it("有効な数値の場合 ok を返すこと", () => {
-      const result = newAge(25);
-
-      expect(isErr(result)).toBe(false);
-      expect(unwrap(result)).toBe(25);
-    });
-
-    it("範囲外の数値の場合 err を返すこと", () => {
-      const result = newAge(200);
-
-      expect(isErr(result)).toBe(true);
-      expect(unwrapErr(result).code).toBe("Validation Error");
-    });
-
-    it("文字列を渡した場合 err を返すこと", () => {
-      const result = newAge("25");
-
-      expect(isErr(result)).toBe(true);
-    });
-  });
-});
-
-const newOptionalEmail = newVoOrNone(emailSchema, "Email");
-
-describe("newVoOrNone", () => {
-  describe("空文字列の場合", () => {
-    it("空文字列を渡した場合 ok(null) を返すこと", () => {
-      const result = newOptionalEmail("");
-
-      expect(isErr(result)).toBe(false);
-      expect(unwrap(result)).toBeNull();
-    });
-  });
-
-  describe("成功ケース", () => {
-    it("有効な値の場合 ok を返すこと", () => {
-      const result = newOptionalEmail("test@example.com");
-
-      expect(isErr(result)).toBe(false);
-      expect<string | null>(unwrap(result)).toBe("test@example.com");
-    });
-  });
-
-  describe("失敗ケース", () => {
-    it("無効な値の場合 err を返すこと", () => {
-      const result = newOptionalEmail("invalid-email");
-
-      expect(isErr(result)).toBe(true);
-    });
-
-    it("エラーが ValidationError であること", () => {
-      const result = newOptionalEmail("invalid-email");
-
-      expect(unwrapErr(result).code).toBe("Validation Error");
-    });
-
-    it("エラーメッセージに type 名が含まれること", () => {
-      const result = newOptionalEmail("invalid-email");
-      const error = unwrapErr(result);
-
-      expect(error.message).toBe("Email is invalid. ( type: Email )");
-    });
-
-    it("name を指定した場合エラーメッセージに name が使われること", () => {
-      const result = newOptionalEmail("invalid-email", "optionalEmail");
-      const error = unwrapErr(result);
-
-      expect(error.message).toBe("optionalEmail is invalid. ( type: Email )");
-      expect(error.details[0]).toMatch(/^optionalEmail:/);
-    });
-
-    it("null を渡した場合 err を返すこと", () => {
-      const result = newOptionalEmail(null);
-
-      expect(isErr(result)).toBe(true);
-    });
-
-    it("undefined を渡した場合 err を返すこと", () => {
-      const result = newOptionalEmail(undefined);
-
-      expect(isErr(result)).toBe(true);
-    });
-  });
-});
-
-describe("エラー内容", () => {
-  it("details に Issue のメッセージが入ること", () => {
+  it("無効な値なら ValidationError を返す", () => {
     const error = unwrapErr(newEmail("invalid-email"));
 
+    expect(error.code).toBe("Validation Error");
+    expect(error.message).toBe("Email is invalid. ( type: Email )");
     expect(error.details).toEqual([
       'Email: Invalid email: Received "invalid-email"',
     ]);
   });
 
-  it("型が違う場合は型エラーのメッセージになること", () => {
-    const error = unwrapErr(newEmail(1));
-
-    expect(error.details).toEqual([
+  it("型が違う場合は型エラーのメッセージになる", () => {
+    expect(unwrapErr(newEmail(1)).details).toEqual([
       "Email: Invalid type: Expected string but received 1",
     ]);
+    expect(isErr(newEmail(null))).toBe(true);
+    expect(isErr(newEmail(undefined))).toBe(true);
+  });
+
+  it("1 引数なので Array.map にそのまま渡せる", () => {
+    const errors = ["a@example.com", "bad", "bad"]
+      .map(newEmail)
+      .filter(isErr)
+      .map((r) => r.error.message);
+
+    expect(errors).toEqual([
+      "Email is invalid. ( type: Email )",
+      "Email is invalid. ( type: Email )",
+    ]);
+  });
+
+  it("emptyAsNull と組み合わせると任意項目になる", () => {
+    const newOptionalEmail = newVo(v.emptyAsNull(email), "Email");
+    const value: Email | null = unwrap(newOptionalEmail(""));
+
+    expect(value).toBeNull();
+    expect<string | null>(unwrap(newOptionalEmail("a@example.com"))).toBe(
+      "a@example.com",
+    );
+    expect(isErr(newOptionalEmail("invalid"))).toBe(true);
+  });
+
+  it("数値のパーサーでも使える", () => {
+    const newAge = newVo(
+      v.chain(v.number, v.integer, v.minValue(0), v.maxValue(150)),
+      "Age",
+    );
+
+    expect(unwrap(newAge(25))).toBe(25);
+    expect(unwrapErr(newAge(200)).details).toEqual([
+      "Age: Invalid value: Expected <=150 but received 200",
+    ]);
+    expect(isErr(newAge("25"))).toBe(true);
+  });
+});
+
+describe("withName", () => {
+  it("表示名を差し替える", () => {
+    const r = rslt.pipe(
+      newEmail("invalid-email"),
+      rslt.mapErr(withName("userEmail")),
+    );
+    const error = unwrapErr(r);
+
+    expect(error.code).toBe("Validation Error");
+    expect(error.message).toBe("userEmail is invalid. ( type: Email )");
+    expect(error.details).toEqual([
+      'userEmail: Invalid email: Received "invalid-email"',
+    ]);
+  });
+
+  it("何度でも差し替えられる", () => {
+    const r = rslt.pipe(
+      newEmail("invalid-email"),
+      rslt.mapErr(withName("a")),
+      rslt.mapErr(withName("b")),
+    );
+
+    expect(unwrapErr(r).message).toBe("b is invalid. ( type: Email )");
+  });
+
+  it("成功時は何もしない", () => {
+    const r = rslt.pipe(
+      newEmail("a@example.com"),
+      rslt.mapErr(withName("userEmail")),
+    );
+
+    expect<string>(unwrap(r)).toBe("a@example.com");
+  });
+
+  it("newVo 以外で作られた ValidationError はそのまま返す", () => {
+    const e = new ValidationError("other");
+
+    expect(withName("x")(e)).toBe(e);
   });
 });

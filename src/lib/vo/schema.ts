@@ -1,9 +1,10 @@
 /**
- * 最小限のスキーマバリデーション (valibot と同じ名前・使い方)
+ * 最小限のパーサー (スキーマ)
  *
- * - スキーマ・検証・変換はすべて「入力を受け取って Result を返す関数」(Step)
- * - `pipe` は Step を左から順に通し、最初の Failure で止まる
- * - すべて同期
+ * - パーサーは「入力を受け取って Result を返す関数」(Parser)。型チェックも検証も同じ形
+ * - 引数のないパーサーは値 (`v.string`)、引数があるものは関数 (`v.minLength(3)`)
+ * - `chain` はパーサーを左から順につなげる (Kleisli 合成)。最初の失敗で止まり、エラーは 1 件
+ * - すべて同期・純粋
  */
 import { err, isErr, ok, type Result } from "../rslt/index.js";
 
@@ -11,20 +12,20 @@ import { err, isErr, ok, type Result } from "../rslt/index.js";
 // 型
 // ----------------------------------------------------------------------------
 
-/** バリデーションの問題 1 件 */
+/** パースの失敗 */
 export type Issue = { readonly message: string };
 
-/** I を受け取り、O か Issue[] を返す 1 ステップ (スキーマ・検証・変換の共通の形) */
-export type Step<I, O> = (input: I) => Result<O, Issue[]>;
+/** I を受け取り、O か Issue を返すパーサー */
+export type Parser<I, O> = (input: I) => Result<O, Issue>;
 
-/** unknown を受け取れる Step。newVo などに渡すのはこれ */
-export type Schema<O> = Step<unknown, O>;
+/** unknown を受け取れるパーサー。newVo に渡すのはこれ */
+export type Schema<O> = Parser<unknown, O>;
 
-/** Step の出力の型 */
+/** パーサーの出力の型 */
 // biome-ignore lint/suspicious/noExplicitAny: 入力の型は問わない
-export type InferOutput<S extends Step<any, unknown>> =
+export type InferOutput<P extends Parser<any, unknown>> =
   // biome-ignore lint/suspicious/noExplicitAny: 入力の型は問わない
-  S extends Step<any, infer O> ? O : never;
+  P extends Parser<any, infer O> ? O : never;
 
 declare const brandSymbol: unique symbol;
 
@@ -48,15 +49,15 @@ const show = (v: unknown): string => {
   return String(v);
 };
 
-const fail = (message: string): Result<never, Issue[]> => err([{ message }]);
+const fail = (message: string): Result<never, Issue> => err({ message });
 
-// 条件を満たせば入力をそのまま返し、満たさなければ Issue を返す Step を作る
+// 条件を満たせば入力をそのまま返し、満たさなければ Issue を返すパーサーを作る
 const check =
-  <T>(cond: (v: T) => boolean, message: (v: T) => string): Step<T, T> =>
+  <T>(cond: (v: T) => boolean, message: (v: T) => string): Parser<T, T> =>
   (input) =>
     cond(input) ? ok(input) : fail(message(input));
 
-// 型チェックをする Schema を作る
+// 型チェックをするパーサーを作る
 const typed =
   <T>(expected: string, guard: (v: unknown) => v is T): Schema<T> =>
   (input) =>
@@ -68,98 +69,104 @@ const typed =
 // 型チェック
 // ----------------------------------------------------------------------------
 
-/** 文字列であることを検証する */
-export const string = (): Schema<string> =>
-  typed("string", (v): v is string => typeof v === "string");
+/** 文字列 */
+export const string: Schema<string> = typed(
+  "string",
+  (v): v is string => typeof v === "string",
+);
 
-/** 数値 (NaN を除く) であることを検証する */
-export const number = (): Schema<number> =>
-  typed(
-    "number",
-    (v): v is number => typeof v === "number" && !Number.isNaN(v),
-  );
+/** 数値 (NaN を除く) */
+export const number: Schema<number> = typed(
+  "number",
+  (v): v is number => typeof v === "number" && !Number.isNaN(v),
+);
 
-/** 真偽値であることを検証する */
-export const boolean = (): Schema<boolean> =>
-  typed("boolean", (v): v is boolean => typeof v === "boolean");
+/** 真偽値 */
+export const boolean: Schema<boolean> = typed(
+  "boolean",
+  (v): v is boolean => typeof v === "boolean",
+);
 
 // ----------------------------------------------------------------------------
 // 検証 (文字列)
 // ----------------------------------------------------------------------------
 
-/** 文字数が min 以上であることを検証する */
-export const minLength = (min: number): Step<string, string> =>
+/** 文字数が min 以上 */
+export const minLength = (min: number): Parser<string, string> =>
   check(
     (v) => v.length >= min,
     (v) => `Invalid length: Expected >=${min} but received ${v.length}`,
   );
 
-/** 文字数が max 以下であることを検証する */
-export const maxLength = (max: number): Step<string, string> =>
+/** 文字数が max 以下 */
+export const maxLength = (max: number): Parser<string, string> =>
   check(
     (v) => v.length <= max,
     (v) => `Invalid length: Expected <=${max} but received ${v.length}`,
   );
 
-/** 文字数がちょうど len であることを検証する */
-export const length = (len: number): Step<string, string> =>
+/** 文字数がちょうど len */
+export const length = (len: number): Parser<string, string> =>
   check(
     (v) => v.length === len,
     (v) => `Invalid length: Expected ${len} but received ${v.length}`,
   );
 
-/** 空文字列でないことを検証する */
-export const nonEmpty = (): Step<string, string> =>
-  check(
-    (v) => v.length > 0,
-    () => "Invalid length: Expected !0 but received 0",
-  );
+/** 空文字列でない */
+export const nonEmpty: Parser<string, string> = check(
+  (v) => v.length > 0,
+  () => "Invalid length: Expected !0 but received 0",
+);
 
-/** 正規表現に一致することを検証する */
-export const regex = (re: RegExp): Step<string, string> =>
-  check(
-    (v) => {
-      re.lastIndex = 0; // g / y フラグ付きでも毎回先頭から判定する
-      return re.test(v);
-    },
+/**
+ * 正規表現に一致する
+ *
+ * 渡された RegExp は書き換えない (g / y フラグを外したコピーで判定する)
+ */
+export const regex = (re: RegExp): Parser<string, string> => {
+  const r = new RegExp(re.source, re.flags.replace(/[gy]/g, ""));
+  return check(
+    (v) => r.test(v),
     (v) => `Invalid format: Expected ${re} but received ${show(v)}`,
   );
+};
 
 // valibot の EMAIL_REGEX と同じ
 const EMAIL_REGEX =
   /^[\w+-]+(?:\.[\w+-]+)*@[\da-z]+(?:[.-][\da-z]+)*\.[a-z]{2,}$/iu;
 
-/** メールアドレスの形式であることを検証する */
-export const email = (): Step<string, string> =>
-  check(
-    (v) => EMAIL_REGEX.test(v),
-    (v) => `Invalid email: Received ${show(v)}`,
-  );
+/** メールアドレスの形式 */
+export const email: Parser<string, string> = check(
+  (v) => EMAIL_REGEX.test(v),
+  (v) => `Invalid email: Received ${show(v)}`,
+);
 
 // ----------------------------------------------------------------------------
 // 検証 (数値)
 // ----------------------------------------------------------------------------
 
-/** min 以上であることを検証する */
-export const minValue = (min: number): Step<number, number> =>
+/** min 以上 */
+export const minValue = (min: number): Parser<number, number> =>
   check(
     (v) => v >= min,
     (v) => `Invalid value: Expected >=${min} but received ${v}`,
   );
 
-/** max 以下であることを検証する */
-export const maxValue = (max: number): Step<number, number> =>
+/** max 以下 */
+export const maxValue = (max: number): Parser<number, number> =>
   check(
     (v) => v <= max,
     (v) => `Invalid value: Expected <=${max} but received ${v}`,
   );
 
-/** 整数であることを検証する */
-export const integer = (): Step<number, number> =>
-  check<number>(Number.isInteger, (v) => `Invalid integer: Received ${v}`);
+/** 整数 */
+export const integer: Parser<number, number> = check<number>(
+  Number.isInteger,
+  (v) => `Invalid integer: Received ${v}`,
+);
 
 // ----------------------------------------------------------------------------
-// 合成
+// 組み合わせ
 // ----------------------------------------------------------------------------
 
 /**
@@ -167,121 +174,128 @@ export const integer = (): Step<number, number> =>
  *
  * @example
  * ```typescript
- * const email = v.pipe(v.string(), v.email(), v.brand("Email"));
+ * const email = v.chain(v.string, v.email, v.brand("Email"));
  * type Email = v.InferOutput<typeof email>; // string & Brand<"Email">
  * ```
  */
 export const brand =
   <B extends string>(_name: B) =>
-  <T>(input: T): Result<T & Brand<B>, Issue[]> =>
+  <T>(input: T): Result<T & Brand<B>, Issue> =>
     ok(input as T & Brand<B>);
 
 /**
- * Step を左から順に通す。最初に Failure になった Step で止まる (最大 10 個)
+ * 空文字列なら null を返し、それ以外は parser に渡すパーサーを作る
+ *
+ * フォーム入力など、未入力を null で表現したい任意項目に使う
  *
  * @example
  * ```typescript
- * const age = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(150));
+ * const optionalEmail = v.emptyAsNull(email); // Schema<Email | null>
+ * optionalEmail("");              // ok(null)
+ * optionalEmail("a@example.com"); // ok(Email)
  * ```
  */
-// <generated:pipe> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
-export function pipe<A, B1>(s1: Step<A, B1>): Step<A, B1>;
-export function pipe<A, B1, B2>(s1: Step<A, B1>, s2: Step<B1, B2>): Step<A, B2>;
-export function pipe<A, B1, B2, B3>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-): Step<A, B3>;
-export function pipe<A, B1, B2, B3, B4>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-): Step<A, B4>;
-export function pipe<A, B1, B2, B3, B4, B5>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-  s5: Step<B4, B5>,
-): Step<A, B5>;
-export function pipe<A, B1, B2, B3, B4, B5, B6>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-  s5: Step<B4, B5>,
-  s6: Step<B5, B6>,
-): Step<A, B6>;
-export function pipe<A, B1, B2, B3, B4, B5, B6, B7>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-  s5: Step<B4, B5>,
-  s6: Step<B5, B6>,
-  s7: Step<B6, B7>,
-): Step<A, B7>;
-export function pipe<A, B1, B2, B3, B4, B5, B6, B7, B8>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-  s5: Step<B4, B5>,
-  s6: Step<B5, B6>,
-  s7: Step<B6, B7>,
-  s8: Step<B7, B8>,
-): Step<A, B8>;
-export function pipe<A, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-  s5: Step<B4, B5>,
-  s6: Step<B5, B6>,
-  s7: Step<B6, B7>,
-  s8: Step<B7, B8>,
-  s9: Step<B8, B9>,
-): Step<A, B9>;
-export function pipe<A, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
-  s1: Step<A, B1>,
-  s2: Step<B1, B2>,
-  s3: Step<B2, B3>,
-  s4: Step<B3, B4>,
-  s5: Step<B4, B5>,
-  s6: Step<B5, B6>,
-  s7: Step<B6, B7>,
-  s8: Step<B7, B8>,
-  s9: Step<B8, B9>,
-  s10: Step<B9, B10>,
-): Step<A, B10>;
-// </generated:pipe>
+export const emptyAsNull =
+  <I, O>(parser: Parser<I, O>): Parser<I, O | null> =>
+  (input) =>
+    input === "" ? ok(null) : parser(input);
+
+/**
+ * パーサーを左から順につなげる (Kleisli 合成)。最初に失敗したパーサーで止まる (最大 10 個)
+ *
+ * 前のパーサーの出力型と、次のパーサーの入力型が合わないと型エラーになる
+ *
+ * @example
+ * ```typescript
+ * const age = v.chain(v.number, v.integer, v.minValue(0), v.maxValue(150));
+ * ```
+ */
+// <generated:chain> scripts/gen-overloads.ts で生成 (bun run gen)。直接編集しないこと
+export function chain<A, B1>(p1: Parser<A, B1>): Parser<A, B1>;
+export function chain<A, B1, B2>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+): Parser<A, B2>;
+export function chain<A, B1, B2, B3>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+): Parser<A, B3>;
+export function chain<A, B1, B2, B3, B4>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+): Parser<A, B4>;
+export function chain<A, B1, B2, B3, B4, B5>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+  p5: Parser<B4, B5>,
+): Parser<A, B5>;
+export function chain<A, B1, B2, B3, B4, B5, B6>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+  p5: Parser<B4, B5>,
+  p6: Parser<B5, B6>,
+): Parser<A, B6>;
+export function chain<A, B1, B2, B3, B4, B5, B6, B7>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+  p5: Parser<B4, B5>,
+  p6: Parser<B5, B6>,
+  p7: Parser<B6, B7>,
+): Parser<A, B7>;
+export function chain<A, B1, B2, B3, B4, B5, B6, B7, B8>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+  p5: Parser<B4, B5>,
+  p6: Parser<B5, B6>,
+  p7: Parser<B6, B7>,
+  p8: Parser<B7, B8>,
+): Parser<A, B8>;
+export function chain<A, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+  p5: Parser<B4, B5>,
+  p6: Parser<B5, B6>,
+  p7: Parser<B6, B7>,
+  p8: Parser<B7, B8>,
+  p9: Parser<B8, B9>,
+): Parser<A, B9>;
+export function chain<A, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
+  p1: Parser<A, B1>,
+  p2: Parser<B1, B2>,
+  p3: Parser<B2, B3>,
+  p4: Parser<B3, B4>,
+  p5: Parser<B4, B5>,
+  p6: Parser<B5, B6>,
+  p7: Parser<B6, B7>,
+  p8: Parser<B7, B8>,
+  p9: Parser<B8, B9>,
+  p10: Parser<B9, B10>,
+): Parser<A, B10>;
+// </generated:chain>
 // biome-ignore lint/suspicious/noExplicitAny: 型はオーバーロードで付ける
-export function pipe(...steps: Step<any, unknown>[]): Step<unknown, unknown> {
+export function chain(
+  ...parsers: Parser<any, unknown>[]
+): Parser<unknown, unknown> {
   return (input) => {
     let value = input;
-    for (const step of steps) {
-      const r = step(value);
+    for (const parser of parsers) {
+      const r = parser(value);
       if (isErr(r)) return r;
       value = r.value;
     }
     return ok(value);
   };
 }
-
-// ----------------------------------------------------------------------------
-// 実行
-// ----------------------------------------------------------------------------
-
-/**
- * スキーマで入力を検証する。`schema(input)` と同じ
- *
- * @example
- * ```typescript
- * const r = v.parse(v.string(), input); // Result<string, Issue[]>
- * ```
- */
-export const parse = <O>(
-  schema: Schema<O>,
-  input: unknown,
-): Result<O, Issue[]> => schema(input);
