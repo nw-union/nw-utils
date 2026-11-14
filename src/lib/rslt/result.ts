@@ -42,10 +42,6 @@ export const err = <E>(error: E): Result<never, E> =>
 // 判定
 // ----------------------------------------------------------------------------
 
-/** 成功かどうか (型ガード) */
-export const isOk = <T, E>(r: Result<T, E>): r is Success<T> =>
-  r.type === "Success";
-
 /** 失敗かどうか (型ガード) */
 export const isErr = <T, E>(r: Result<T, E>): r is Failure<E> =>
   r.type === "Failure";
@@ -206,7 +202,7 @@ export function pipe(a: unknown, ...fns: ((v: unknown) => unknown)[]): unknown {
 export const map =
   <T, U>(fn: (v: T) => U) =>
   <E>(r: Result<T, E>): Result<U, E> =>
-    isOk(r) ? ok(fn(r.value)) : r;
+    isErr(r) ? r : ok(fn(r.value));
 
 /** エラーを変換する関数を作る */
 export const mapErr =
@@ -218,7 +214,7 @@ export const mapErr =
 export const andThen =
   <T, U, F>(fn: (v: T) => Result<U, F>) =>
   <E>(r: Result<T, E>): Result<U, E | F> =>
-    isOk(r) ? fn(r.value) : r;
+    isErr(r) ? r : fn(r.value);
 
 /** 失敗時に、別の Result を返す処理で回復を試みる関数を作る */
 export const orElse =
@@ -654,6 +650,34 @@ const runIgnoringErrors = (fn: () => unknown): void => {
 };
 
 /**
+ * 成功値を使って副作用 (ログ出力など) を実行し、**元の成功値をそのまま返す** 関数を作る (flow 用)
+ *
+ * `through` のエラーを無視する版。`rslt.andTee` の flow 版
+ *
+ * - fn の戻り値は捨てる。Failure を返しても無視する (後続の処理は止まらない)
+ * - fn の例外も Promise の reject も握りつぶす (非同期の完了は待たない)
+ *
+ * 失敗しても本筋に影響させたくない処理 (ログ、アクセス記録など) を flow の途中に挟むのに使う。
+ * 失敗したら止めたい処理には `through` を使う
+ *
+ * @example
+ * ```typescript
+ * flow(
+ *   ok(req),
+ *   getToken,
+ *   tee((token) => logger.info(`token: ${token}`)),  // 失敗しても無視
+ *   tokenToUser,                                      // token がそのまま渡る
+ * );
+ * ```
+ */
+export const tee =
+  <T>(fn: (v: T) => unknown) =>
+  (v: T): Result<T, never> => {
+    runIgnoringErrors(() => fn(v));
+    return ok(v);
+  };
+
+/**
  * 成功時に、Result を返す処理を実行する関数を作る (pipe 用)。neverthrow の `andThrough` に相当
  *
  * - fn が Success を返したら、**元の成功値**をそのまま返す (fn の成功値は捨てる)
@@ -693,7 +717,7 @@ export const andThrough =
 export const andTee =
   <T>(fn: (v: T) => unknown) =>
   <E>(r: Result<T, E>): Result<T, E> => {
-    if (isOk(r)) runIgnoringErrors(() => fn(r.value));
+    if (!isErr(r)) runIgnoringErrors(() => fn(r.value));
     return r;
   };
 
@@ -716,7 +740,7 @@ export const andTee =
 export const orThrough =
   <E, F>(fn: (e: E) => Result<unknown, F>) =>
   <T>(r: Result<T, E>): Result<T, E | F> => {
-    if (isOk(r)) return r;
+    if (!isErr(r)) return r;
     const out = fn(r.error);
     return isErr(out) ? out : r;
   };

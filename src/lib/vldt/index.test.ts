@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isErr, isOk, type Result } from "../rslt/index.js";
+import { isErr, type Result } from "../rslt/index.js";
 import { newType, newVoOrNone, v } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
@@ -9,7 +9,7 @@ const unwrap = <T, E>(r: Result<T, E>): T => {
   return r.value;
 };
 const unwrapErr = <T, E>(r: Result<T, E>): E => {
-  if (isOk(r)) throw new Error("expected Failure but got Success");
+  if (!isErr(r)) throw new Error("expected Failure but got Success");
   return r.error;
 };
 
@@ -22,7 +22,7 @@ describe("newType", () => {
     it("有効な値の場合 ok を返すこと", () => {
       const result = newEmail("test@example.com");
 
-      expect(isOk(result)).toBe(true);
+      expect(isErr(result)).toBe(false);
       expect<string>(unwrap(result)).toBe("test@example.com");
     });
 
@@ -90,7 +90,7 @@ describe("newType", () => {
     it("有効な数値の場合 ok を返すこと", () => {
       const result = newAge(25);
 
-      expect(isOk(result)).toBe(true);
+      expect(isErr(result)).toBe(false);
       expect(unwrap(result)).toBe(25);
     });
 
@@ -116,7 +116,7 @@ describe("newVoOrNone", () => {
     it("空文字列を渡した場合 ok(null) を返すこと", () => {
       const result = newOptionalEmail("");
 
-      expect(isOk(result)).toBe(true);
+      expect(isErr(result)).toBe(false);
       expect(unwrap(result)).toBeNull();
     });
   });
@@ -125,7 +125,7 @@ describe("newVoOrNone", () => {
     it("有効な値の場合 ok を返すこと", () => {
       const result = newOptionalEmail("test@example.com");
 
-      expect(isOk(result)).toBe(true);
+      expect(isErr(result)).toBe(false);
       expect<string | null>(unwrap(result)).toBe("test@example.com");
     });
   });

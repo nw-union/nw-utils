@@ -110,8 +110,7 @@ const targets: { file: string; build: (src: string) => string }[] = [
   },
   {
     file: VLDT_FILE,
-    build: (src) =>
-      replaceBlock(VLDT_FILE, src, "pipe", stepPipeOverloads()),
+    build: (src) => replaceBlock(VLDT_FILE, src, "pipe", stepPipeOverloads()),
   },
 ];
 

@@ -7,13 +7,13 @@ import {
   flow,
   flowAsync,
   isErr,
-  isOk,
   ok,
   type Result,
   type ResultAsync,
   rslt,
   sequence,
   sequenceAsync,
+  tee,
   through,
   throughAsync,
 } from "./index.js";
@@ -59,10 +59,10 @@ describe("Result の値", () => {
   });
 });
 
-describe("isOk / isErr", () => {
+describe("isErr", () => {
   it("型ガードとして絞り込める", () => {
     const r: Result<number, string> = ok1;
-    if (isOk(r)) {
+    if (!isErr(r)) {
       const v: number = r.value;
       expect(v).toBe(1);
     }
@@ -79,9 +79,7 @@ describe("isOk / isErr", () => {
   });
 
   it("判定できる", () => {
-    expect(isOk(ok1)).toBe(true);
     expect(isErr(ok1)).toBe(false);
-    expect(isOk(ng)).toBe(false);
     expect(isErr(ng)).toBe(true);
   });
 });
@@ -319,8 +317,8 @@ describe("flow", () => {
   it("JSON を経由して value が消えた ok() も Result として扱う", () => {
     const fromJson = JSON.parse(JSON.stringify(ok())); // { type: "Success" }
     const r = flow(ok(1), () => fromJson);
-    expect(isOk(r)).toBe(true);
-    expect(isOk(r) && r.value).toBeUndefined();
+    expect(isErr(r)).toBe(false);
+    expect(!isErr(r) && r.value).toBeUndefined();
     // type 以外のキーを持つ場合は Result とみなさない
     const other = flow(ok(1), () => ({ type: "Success", id: 1 }));
     expect(other).toEqual(ok({ type: "Success", id: 1 }));
@@ -610,6 +608,71 @@ describe("through", () => {
   it("Promise を返す関数は渡せない (型エラー)", () => {
     // @ts-expect-error 非同期関数は throughAsync を使う
     through(async (n: number) => n);
+  });
+});
+
+describe("tee", () => {
+  it("元の値がそのまま次に渡り、fn の戻り値は捨てられる", () => {
+    const seen: number[] = [];
+    const r = flow(
+      ok(1),
+      tee((n: number) => {
+        seen.push(n);
+        return n * 100;
+      }),
+      (n) => n + 1,
+    );
+    expect(r).toEqual(ok(2));
+    expect(seen).toEqual([1]);
+  });
+
+  it("fn が Failure を返しても無視して続行する", () => {
+    const r = flow(
+      ok(1),
+      tee(() => err("ignored")),
+    );
+    expect(r).toEqual(ok(1));
+  });
+
+  it("fn が例外を投げても握りつぶして続行する", () => {
+    const r = flow(
+      ok(1),
+      tee(() => {
+        throw new Error("boom");
+      }),
+    );
+    expect(r).toEqual(ok(1));
+  });
+
+  it("非同期 fn の reject も握りつぶす", async () => {
+    const r = flow(
+      ok(1),
+      tee(async () => {
+        throw new Error("boom");
+      }),
+    );
+    expect(r).toEqual(ok(1));
+    await Promise.resolve();
+  });
+
+  it("前段が Failure なら fn を呼ばない", () => {
+    let called = false;
+    const r = flow(
+      ng,
+      tee(() => {
+        called = true;
+      }),
+    );
+    expect(r).toEqual(ng);
+    expect(called).toBe(false);
+  });
+
+  it("エラー型は増えない", () => {
+    const r: Result<number, string> = flow(
+      ok1,
+      tee(() => err(new Error("x"))),
+    );
+    expect(r).toEqual(ok(1));
   });
 });
 

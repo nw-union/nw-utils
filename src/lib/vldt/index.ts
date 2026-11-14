@@ -13,7 +13,7 @@
  * ```
  */
 import { ValidationError } from "../../error.js";
-import { err, isOk, ok, type Result } from "../rslt/index.js";
+import { err, isErr, ok, type Result } from "../rslt/index.js";
 import type { InferOutput, Issue, Schema } from "./schema.js";
 
 export type { Brand, InferOutput, Issue, Schema, Step } from "./schema.js";
@@ -43,9 +43,9 @@ export const newType =
   <S extends Schema<unknown>>(schema: S, type: string) =>
   (src: unknown, name?: string): Result<InferOutput<S>, ValidationError> => {
     const r = schema(src);
-    return isOk(r)
-      ? ok(r.value as InferOutput<S>)
-      : err(newValidationError(type, r.error, name));
+    return isErr(r)
+      ? err(newValidationError(type, r.error, name))
+      : ok(r.value as InferOutput<S>);
   };
 
 /**
