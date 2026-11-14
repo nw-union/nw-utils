@@ -103,7 +103,7 @@ export const tryAsync = async <T, E>(
  *   newEmail(input),                       // Result<Email, ValidationError>
  *   rslt.map((email) => email.toLowerCase()),
  *   rslt.andThen(findUserByEmail),         // (email) => Result<User, NotFoundError>
- *   rslt.mapError((e) => toAppError(e)),
+ *   rslt.mapErr((e) => toAppError(e)),
  * );
  * ```
  */
@@ -209,7 +209,7 @@ export const map =
     isOk(r) ? ok(fn(r.value)) : r;
 
 /** エラーを変換する関数を作る */
-export const mapError =
+export const mapErr =
   <E, F>(fn: (e: E) => F) =>
   <T>(r: Result<T, E>): Result<T, F> =>
     isErr(r) ? err(fn(r.error)) : r;
@@ -636,25 +636,108 @@ export const throughAsync =
       : ok(v);
   };
 
+// fn を実行し、例外も Promise の reject も握りつぶす (tee 用)
+const runIgnoringErrors = (fn: () => unknown): void => {
+  try {
+    const out = fn();
+    // 非同期の関数なら reject を握りつぶす (完了は待たない)
+    if (
+      typeof out === "object" &&
+      out !== null &&
+      typeof (out as PromiseLike<unknown>).then === "function"
+    ) {
+      (out as PromiseLike<unknown>).then(undefined, () => {});
+    }
+  } catch {
+    // tee は fn の失敗を気にしない
+  }
+};
+
 /**
- * 成功値を使って処理を実行し、元の Result をそのまま返す関数を作る (pipe 用)
+ * 成功時に、Result を返す処理を実行する関数を作る (pipe 用)。neverthrow の `andThrough` に相当
  *
- * neverthrow の `andThrough` / `andTee` に相当する。flow の中では `through` を使う
- * (flow の関数は成功値を受け取り、pipe の関数は Result を受け取るため)
- *
+ * - fn が Success を返したら、**元の成功値**をそのまま返す (fn の成功値は捨てる)
  * - fn が Failure を返したら、その Failure を返す
- * - fn が void / 成功の Result / それ以外の値を返したら、元の Result をそのまま返す
+ * - fn の例外はそのまま投げる
+ *
+ * 値を変えない検証 (権限チェックなど) に使う。flow の中では `through` を使う
  *
  * @example
  * ```typescript
  * pipe(newEmail(input), rslt.andThrough(checkNotBlocked));
- * // Result<Email, ValidationError | BlockedError>  (成功なら newEmail の結果がそのまま)
+ * // checkNotBlocked: (email) => Result<void, BlockedError>
+ * // => Result<Email, ValidationError | BlockedError>
  * ```
  */
 export const andThrough =
-  <T, R>(fn: (v: T) => R & NotPromise<R>) =>
-  <E>(r: Result<T, E>): Result<T, E | Err<R>> =>
-    isErr(r) ? r : through<T, R>(fn)(r.value);
+  <T, F>(fn: (v: T) => Result<unknown, F>) =>
+  <E>(r: Result<T, E>): Result<T, E | F> => {
+    if (isErr(r)) return r;
+    const out = fn(r.value);
+    return isErr(out) ? out : r;
+  };
+
+/**
+ * 成功時に、副作用 (ログ出力など) を実行する関数を作る (pipe 用)。neverthrow の `andTee` に相当
+ *
+ * - fn の戻り値は捨て、**常に元の Result** を返す
+ * - fn の例外も、fn が返した Promise の reject も**握りつぶす** (Promise の完了は待たない)
+ *
+ * 失敗しても本筋に影響させたくない処理に使う
+ *
+ * @example
+ * ```typescript
+ * pipe(findUser(id), rslt.andTee((user) => logger.info(`found: ${user.id}`)));
+ * ```
+ */
+export const andTee =
+  <T>(fn: (v: T) => unknown) =>
+  <E>(r: Result<T, E>): Result<T, E> => {
+    if (isOk(r)) runIgnoringErrors(() => fn(r.value));
+    return r;
+  };
+
+/**
+ * 失敗時に、Result を返す処理を実行する関数を作る (pipe 用)。byethrow の `orThrough` に相当
+ *
+ * - fn が Success を返したら、**元のエラー**をそのまま返す (回復はしない)
+ * - fn が Failure を返したら、その Failure を返す
+ * - fn の例外はそのまま投げる
+ *
+ * エラーを記録する処理 (それ自体が失敗しうるもの) を挟むのに使う
+ *
+ * @example
+ * ```typescript
+ * pipe(saveUser(user), rslt.orThrough(recordFailure));
+ * // recordFailure: (e: DbError) => Result<void, AuditError>
+ * // => Result<User, DbError | AuditError>
+ * ```
+ */
+export const orThrough =
+  <E, F>(fn: (e: E) => Result<unknown, F>) =>
+  <T>(r: Result<T, E>): Result<T, E | F> => {
+    if (isOk(r)) return r;
+    const out = fn(r.error);
+    return isErr(out) ? out : r;
+  };
+
+/**
+ * 失敗時に、副作用 (ログ出力など) を実行する関数を作る (pipe 用)。neverthrow の `orTee` に相当
+ *
+ * - fn の戻り値は捨て、**常に元の Result** を返す
+ * - fn の例外も、fn が返した Promise の reject も**握りつぶす** (Promise の完了は待たない)
+ *
+ * @example
+ * ```typescript
+ * pipe(saveUser(user), rslt.orTee((e) => logger.error("save failed", e)));
+ * ```
+ */
+export const orTee =
+  <E>(fn: (e: E) => unknown) =>
+  <T>(r: Result<T, E>): Result<T, E> => {
+    if (isErr(r)) runIgnoringErrors(() => fn(r.error));
+    return r;
+  };
 
 // ----------------------------------------------------------------------------
 // sequence / collect (複数の Result をまとめる)

@@ -76,10 +76,11 @@ AppError (基底クラス)
 - 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
 - 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
-- 変換: `rslt.map`, `rslt.mapError`, `rslt.andThen`, `rslt.orElse`, `rslt.andThrough` (すべて同期・data-last。`rslt.map(fn)` は Result を受け取る関数を返し、`pipe(r, rslt.map(fn), ...)` のように使う)
+- 変換: `rslt.map`, `rslt.mapErr`, `rslt.andThen`, `rslt.orElse` (すべて同期・data-last。`rslt.map(fn)` は Result を受け取る関数を返し、`pipe(r, rslt.map(fn), ...)` のように使う)
 - `pipe`: 値を左から順に関数へ通す (最大 10 個)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
-- 素通り: `through` (flow 用), `throughAsync` (flowAsync 用), `rslt.andThrough` (pipe 用) (関数の戻り値を捨てて直前の成功値をそのまま渡す。Failure なら止まる)
+- 素通り (pipe 用): `rslt.andThrough` / `rslt.orThrough` (Result を返す処理を挟む。Failure なら止まる), `rslt.andTee` / `rslt.orTee` (副作用を挟む。例外も握りつぶす)
+- 素通り (flow 用): `through`, `throughAsync` (戻り値を捨てて直前の成功値を渡す。Failure なら止まる)
 - 集約: `sequence` (最初の Failure), `collect` (全エラー), `sequenceAsync`, `collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:

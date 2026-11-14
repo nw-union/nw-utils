@@ -107,7 +107,7 @@ describe("pipe", () => {
       ok1,
       rslt.map((n) => n * 10),
       rslt.andThen(check),
-      rslt.mapError((e) => ({ reason: e })),
+      rslt.mapErr((e) => ({ reason: e })),
     );
     assertType<Equal<typeof r, Result<string, { reason: string | "small" }>>>();
     expect(r).toEqual(ok("10"));
@@ -130,7 +130,7 @@ describe("pipe", () => {
   });
 });
 
-describe("map / mapError", () => {
+describe("map / mapErr", () => {
   it("map は成功値のみ変換する", () => {
     expect(
       pipe(
@@ -145,17 +145,17 @@ describe("map / mapError", () => {
       ),
     ).toBe(ng);
   });
-  it("mapError はエラーのみ変換する", () => {
+  it("mapErr はエラーのみ変換する", () => {
     expect(
       pipe(
         ng,
-        rslt.mapError((e) => e.length),
+        rslt.mapErr((e) => e.length),
       ),
     ).toEqual(err(2));
     expect(
       pipe(
         ok1,
-        rslt.mapError((e) => e.length),
+        rslt.mapErr((e) => e.length),
       ),
     ).toEqual(ok(1));
   });
@@ -646,31 +646,180 @@ describe("throughAsync", () => {
 });
 
 describe("andThrough", () => {
-  it("成功なら fn を実行して元の Result を返す", () => {
+  const checkPositive = (n: number): Result<void, DbError> =>
+    n > 0 ? ok() : err(new DbError("not positive"));
+
+  it("f が Success なら元の成功値を返す (f の成功値は捨てる)", () => {
+    const r = pipe(
+      ok(1),
+      rslt.andThrough((n: number) => ok(`ignored ${n}`)),
+    );
+    expect(r).toEqual(ok(1));
+  });
+
+  it("f が Failure ならその Failure を返し、エラー型が足される", () => {
+    const src: Result<number, string> = ok(-1);
+    const r = pipe(src, rslt.andThrough(checkPositive));
+    assertType<Equal<typeof r, Result<number, string | DbError>>>();
+    expect(isErr(r) && r.error).toBeInstanceOf(DbError);
+  });
+
+  it("元が Failure なら f を呼ばない", () => {
+    let called = false;
+    const r = pipe(
+      err("ng"),
+      rslt.andThrough(() => {
+        called = true;
+        return ok();
+      }),
+    );
+    expect(r).toEqual(err("ng"));
+    expect(called).toBe(false);
+  });
+
+  it("Result を返さない関数は渡せない (型エラー。副作用には andTee を使う)", () => {
+    const _check = () =>
+      pipe(
+        ok(1),
+        // @ts-expect-error void を返す関数
+        rslt.andThrough((_n: number) => {}),
+      );
+  });
+
+  it("f の例外はそのまま投げる", () => {
+    expect(() =>
+      pipe(
+        ok(1),
+        rslt.andThrough((): Result<void, never> => {
+          throw new Error("boom");
+        }),
+      ),
+    ).toThrow("boom");
+  });
+});
+
+describe("andTee", () => {
+  it("成功時に f を実行し、戻り値は捨てて元の Result を返す", () => {
     const seen: number[] = [];
     const r = pipe(
       ok(1),
-      rslt.andThrough((n) => {
+      rslt.andTee((n: number) => {
         seen.push(n);
+        return err("ignored"); // Failure を返しても無視される
       }),
     );
+    assertType<Equal<typeof r, Result<number, never>>>();
     expect(r).toEqual(ok(1));
     expect(seen).toEqual([1]);
   });
 
-  it("fn が Failure を返したらその Failure、元が Failure なら fn を呼ばない", () => {
-    const src: Result<number, string> = ok(1);
+  it("f の例外を握りつぶす", () => {
     const r = pipe(
-      src,
-      rslt.andThrough((n) => (n > 0 ? err(new DbError("db")) : ok())),
+      ok(1),
+      rslt.andTee(() => {
+        throw new Error("boom");
+      }),
     );
-    assertType<Equal<typeof r, Result<number, string | DbError>>>();
-    expect(isErr(r) && r.error).toBeInstanceOf(DbError);
+    expect(r).toEqual(ok(1));
+  });
 
+  it("f が返した Promise の reject も握りつぶす", async () => {
+    const r = pipe(
+      ok(1),
+      rslt.andTee(async () => {
+        throw new Error("async boom");
+      }),
+    );
+    expect(r).toEqual(ok(1));
+    // reject が握りつぶされていなければ、ここで未処理の reject としてテストが失敗する
+    await new Promise((res) => setTimeout(res, 1));
+  });
+
+  it("元が Failure なら f を呼ばない", () => {
     let called = false;
     pipe(
       err("ng"),
-      rslt.andThrough(() => {
+      rslt.andTee(() => {
+        called = true;
+      }),
+    );
+    expect(called).toBe(false);
+  });
+});
+
+describe("orThrough", () => {
+  it("f が Success なら元のエラーを返す (回復はしない)", () => {
+    const src: Result<number, string> = err("ng");
+    const r = pipe(
+      src,
+      rslt.orThrough((_e: string) => ok("recorded")),
+    );
+    assertType<Equal<typeof r, Result<number, string>>>();
+    expect(r).toEqual(err("ng"));
+  });
+
+  it("f が Failure ならその Failure を返し、エラー型が足される", () => {
+    const src: Result<number, string> = err("ng");
+    const r = pipe(
+      src,
+      rslt.orThrough((_e: string) => err(new DbError("audit failed"))),
+    );
+    assertType<Equal<typeof r, Result<number, string | DbError>>>();
+    expect(isErr(r) && r.error).toBeInstanceOf(DbError);
+  });
+
+  it("元が Success なら f を呼ばない", () => {
+    let called = false;
+    const r = pipe(
+      ok1,
+      rslt.orThrough(() => {
+        called = true;
+        return ok();
+      }),
+    );
+    expect(r).toEqual(ok(1));
+    expect(called).toBe(false);
+  });
+});
+
+describe("orTee", () => {
+  it("失敗時に f を実行し、元のエラーを返す", () => {
+    const seen: string[] = [];
+    const r = pipe(
+      ng,
+      rslt.orTee((e: string) => {
+        seen.push(e);
+      }),
+    );
+    expect(r).toEqual(err("ng"));
+    expect(seen).toEqual(["ng"]);
+  });
+
+  it("f の例外と Promise の reject を握りつぶす", async () => {
+    expect(
+      pipe(
+        ng,
+        rslt.orTee(() => {
+          throw new Error("boom");
+        }),
+      ),
+    ).toEqual(err("ng"));
+    expect(
+      pipe(
+        ng,
+        rslt.orTee(async () => {
+          throw new Error("async boom");
+        }),
+      ),
+    ).toEqual(err("ng"));
+    await new Promise((res) => setTimeout(res, 1));
+  });
+
+  it("元が Success なら f を呼ばない", () => {
+    let called = false;
+    pipe(
+      ok1,
+      rslt.orTee(() => {
         called = true;
       }),
     );
