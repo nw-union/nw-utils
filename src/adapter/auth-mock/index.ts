@@ -1,11 +1,7 @@
 import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
-import {
-  flowAsync,
-  ok,
-  type Result,
-  rsltOrElse,
-} from "../../lib/result/index.js";
+import * as rslt from "../../lib/result/index.js";
+import { flowAsync, ok, type Result } from "../../lib/result/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
 const AUTH_HEADER_KEY = "Mock-Access-Assertion";
@@ -16,7 +12,7 @@ export const newAuthMock = (): Auth => ({
 });
 
 const getToken = (req: Request): Result<string, AuthError> =>
-  rsltOrElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
+  rslt.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
     getTokenFromCookie(req, AUTH_COOKIE_KEY),
   );
 

@@ -1,5 +1,6 @@
 import { AuthError } from "../../error.js";
 import type { Auth, User } from "../../interface.js";
+import * as rslt from "../../lib/result/index.js";
 import {
   err,
   flowAsync,
@@ -7,8 +8,6 @@ import {
   ok,
   type Result,
   type ResultAsync,
-  rsltOrElse,
-  rsltTryAsync,
 } from "../../lib/result/index.js";
 import { getTokenFromCookie, getTokenFromHeader } from "../util.js";
 
@@ -239,7 +238,7 @@ const validatePayload = (
 const tokenVerify =
   (jwksUrl: string, issuer: string, audience?: string) =>
   (token: string): ResultAsync<User, AuthError> =>
-    rsltTryAsync(
+    rslt.tryAsync(
       async () => {
         // JWT をデコード
         const decoded = decodeJWT(token);
@@ -302,6 +301,6 @@ const AUTH_COOKIE_KEY = "CF_Authorization";
  * どちらでも取得できなければエラーを返す
  */
 const getToken = (req: Request): Result<string, AuthError> =>
-  rsltOrElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
+  rslt.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
     getTokenFromCookie(req, AUTH_COOKIE_KEY),
   );

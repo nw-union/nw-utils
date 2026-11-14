@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { match } from "ts-pattern";
+import * as rslt from "./index.js";
 import {
+  collect,
+  collectAsync,
   err,
   flow,
   flowAsync,
@@ -9,16 +12,8 @@ import {
   ok,
   type Result,
   type ResultAsync,
-  rsltAndThen,
-  rsltCollect,
-  rsltCollectAsync,
-  rsltMap,
-  rsltMapError,
-  rsltOrElse,
-  rsltSequence,
-  rsltSequenceAsync,
-  rsltTry,
-  rsltTryAsync,
+  sequence,
+  sequenceAsync,
 } from "./index.js";
 
 const ok1: Result<number, string> = ok(1);
@@ -84,12 +79,12 @@ describe("isOk / isErr", () => {
 
 describe("map / mapError", () => {
   it("map は成功値のみ変換する", () => {
-    expect(rsltMap(ok1, (n) => n + 1)).toEqual(ok(2));
-    expect(rsltMap(ng, (n) => n + 1)).toBe(ng);
+    expect(rslt.map(ok1, (n) => n + 1)).toEqual(ok(2));
+    expect(rslt.map(ng, (n) => n + 1)).toBe(ng);
   });
   it("mapError はエラーのみ変換する", () => {
-    expect(rsltMapError(ng, (e) => e.length)).toEqual(err(2));
-    expect(rsltMapError(ok1, (e) => e.length)).toEqual(ok(1));
+    expect(rslt.mapError(ng, (e) => e.length)).toEqual(err(2));
+    expect(rslt.mapError(ok1, (e) => e.length)).toEqual(ok(1));
   });
 });
 
@@ -97,26 +92,26 @@ describe("andThen / orElse", () => {
   const half = (n: number): Result<number, string> =>
     n % 2 === 0 ? ok(n / 2) : err("odd");
   it("andThen は成功時のみ次を実行する", () => {
-    expect(rsltAndThen(ok(4), half)).toEqual(ok(2));
-    expect(rsltAndThen(ok(3), half)).toEqual(err("odd"));
+    expect(rslt.andThen(ok(4), half)).toEqual(ok(2));
+    expect(rslt.andThen(ok(3), half)).toEqual(err("odd"));
     let called = false;
-    rsltAndThen(ng, (n) => {
+    rslt.andThen(ng, (n) => {
       called = true;
       return half(n);
     });
     expect(called).toBe(false);
   });
   it("orElse は失敗時のみフォールバックする", () => {
-    expect(rsltOrElse(ng, () => ok(0))).toEqual(ok(0));
-    expect(rsltOrElse(ok1, () => ok(0))).toEqual(ok(1));
+    expect(rslt.orElse(ng, () => ok(0))).toEqual(ok(0));
+    expect(rslt.orElse(ok1, () => ok(0))).toEqual(ok(1));
   });
 });
 
 describe("try / tryAsync", () => {
   it("try は例外を Failure に変換する", () => {
-    expect(rsltTry(() => 1, String)).toEqual(ok(1));
+    expect(rslt.try(() => 1, String)).toEqual(ok(1));
     expect(
-      rsltTry(
+      rslt.try(
         () => {
           throw new Error("boom");
         },
@@ -127,28 +122,28 @@ describe("try / tryAsync", () => {
   it("一部だけ Promise を返す関数 (union) も渡せない (型エラー)", () => {
     const maybe = (): number | Promise<number> => 1;
     // @ts-expect-error union の一部が Promise
-    rsltTry(maybe, String);
+    rslt.try(maybe, String);
   });
 
   it("any を返す関数は渡せる", () => {
-    expect(rsltTry(() => JSON.parse("1"), String)).toEqual(ok(1));
+    expect(rslt.try(() => JSON.parse("1"), String)).toEqual(ok(1));
   });
 
   it("try に Promise を返す関数は渡せない (型エラー)", () => {
     // @ts-expect-error 非同期関数は tryAsync を使う
-    rsltTry(async () => 1, String);
+    rslt.try(async () => 1, String);
   });
   it("tryAsync は resolve を Success に、reject を Failure に変換する", async () => {
-    expect(await rsltTryAsync(async () => 1, String)).toEqual(ok(1));
+    expect(await rslt.tryAsync(async () => 1, String)).toEqual(ok(1));
     expect(
-      await rsltTryAsync(
+      await rslt.tryAsync(
         () => Promise.reject(new Error("boom")),
         (e) => (e as Error).message,
       ),
     ).toEqual(err("boom"));
   });
   it("tryAsync は同期的な throw も Failure にする", async () => {
-    const r = rsltTryAsync(
+    const r = rslt.tryAsync(
       () => {
         throw new Error("sync");
       },
@@ -315,13 +310,13 @@ describe("sequence", () => {
   const b: Result<string, Error> = ok("x");
 
   it("タプルの形と型を保って成功値をまとめる", () => {
-    const r = rsltSequence([a, b]);
+    const r = sequence([a, b]);
     assertType<Equal<typeof r, Result<[number, string], string | Error>>>();
     expect(r).toEqual(ok([1, "x"]));
   });
 
   it("オブジェクトのキーを保って成功値をまとめる", () => {
-    const r = rsltSequence({ id: a, name: b });
+    const r = sequence({ id: a, name: b });
     assertType<
       Equal<typeof r, Result<{ id: number; name: string }, string | Error>>
     >();
@@ -334,11 +329,11 @@ describe("sequence", () => {
       name: Result<string, Error>;
     }
     const form: Form = { id: ok(1), name: ok("x") };
-    const r = rsltSequence(form);
+    const r = sequence(form);
     assertType<
       Equal<typeof r, Result<{ id: number; name: string }, string | Error>>
     >();
-    const c = rsltCollect(form);
+    const c = collect(form);
     assertType<
       Equal<typeof c, Result<{ id: number; name: string }, (string | Error)[]>>
     >();
@@ -349,30 +344,30 @@ describe("sequence", () => {
     // 型のチェックだけを目的とするので、実行はしない
     const _check = () =>
       // @ts-expect-error 値が Result ではない
-      rsltSequence({ a: 1 });
+      sequence({ a: 1 });
   });
 
   it("可変長の配列もまとめられる", () => {
     const list: Result<number, string>[] = [ok(1), ok(2), ok(3)];
-    const r = rsltSequence(list);
+    const r = sequence(list);
     assertType<Equal<typeof r, Result<number[], string>>>();
     expect(r).toEqual(ok([1, 2, 3]));
   });
 
   it("入力の順番で最初の Failure を返す", () => {
-    expect(rsltSequence([ok(1), err("e1"), err("e2")])).toEqual(err("e1"));
-    expect(rsltSequence({ x: err("e1"), y: err("e2") })).toEqual(err("e1"));
+    expect(sequence([ok(1), err("e1"), err("e2")])).toEqual(err("e1"));
+    expect(sequence({ x: err("e1"), y: err("e2") })).toEqual(err("e1"));
   });
 
   it("空なら空の成功", () => {
-    expect(rsltSequence([])).toEqual(ok([]));
-    expect(rsltSequence({})).toEqual(ok({}));
+    expect(sequence([])).toEqual(ok([]));
+    expect(sequence({})).toEqual(ok({}));
   });
 });
 
 describe("collect", () => {
   it("すべて成功なら sequence と同じ", () => {
-    const r = rsltCollect({ id: ok(1), name: ok("x") });
+    const r = collect({ id: ok(1), name: ok("x") });
     assertType<
       Equal<typeof r, Result<{ id: number; name: string }, never[]>>
     >();
@@ -383,7 +378,7 @@ describe("collect", () => {
     const a: Result<number, string> = err("e1");
     const b: Result<string, Error> = ok("x");
     const c: Result<boolean, string> = err("e3");
-    const r = rsltCollect([a, b, c]);
+    const r = collect([a, b, c]);
     assertType<
       Equal<typeof r, Result<[number, string, boolean], (string | Error)[]>>
     >();
@@ -396,7 +391,7 @@ describe("sequenceAsync / collectAsync", () => {
     new Promise<Result<T, string>>((res) => setTimeout(() => res(r), ms));
 
   it("Result と ResultAsync を混ぜてまとめられる", async () => {
-    const p = rsltSequenceAsync({ user: later(5, ok("u")), n: ok(1) });
+    const p = sequenceAsync({ user: later(5, ok("u")), n: ok(1) });
     assertType<
       Equal<typeof p, ResultAsync<{ user: string; n: number }, string>>
     >();
@@ -418,12 +413,10 @@ describe("sequenceAsync / collectAsync", () => {
       deferred<number>(),
     ];
     let done = false;
-    const p = rsltSequenceAsync([d1.promise, d2.promise, d3.promise]).then(
-      (r) => {
-        done = true;
-        return r;
-      },
-    );
+    const p = sequenceAsync([d1.promise, d2.promise, d3.promise]).then((r) => {
+      done = true;
+      return r;
+    });
     // 後ろから順に完了させる
     d3.resolve(ok(3));
     d2.resolve(ok(2));
@@ -434,7 +427,7 @@ describe("sequenceAsync / collectAsync", () => {
   });
 
   it("sequenceAsync は先に終わった失敗ではなく、入力の順番で最初の Failure を返す", async () => {
-    const r = await rsltSequenceAsync([
+    const r = await sequenceAsync([
       later(20, err("slow")),
       later(1, err("fast")),
     ]);
@@ -442,11 +435,7 @@ describe("sequenceAsync / collectAsync", () => {
   });
 
   it("collectAsync はすべてのエラーを集める", async () => {
-    const p = rsltCollectAsync([
-      later(5, err("e1")),
-      ok(2),
-      later(1, err("e3")),
-    ]);
+    const p = collectAsync([later(5, err("e1")), ok(2), later(1, err("e3"))]);
     assertType<
       Equal<typeof p, ResultAsync<[never, number, never], string[]>>
     >();
@@ -455,14 +444,12 @@ describe("sequenceAsync / collectAsync", () => {
 
   it("渡した Promise が reject したら、Failure ではなく reject する", async () => {
     const boom = Promise.reject(new Error("boom"));
-    await expect(rsltSequenceAsync([ok(1), boom])).rejects.toThrow("boom");
-    await expect(rsltCollectAsync({ a: ok(1), b: boom })).rejects.toThrow(
-      "boom",
-    );
+    await expect(sequenceAsync([ok(1), boom])).rejects.toThrow("boom");
+    await expect(collectAsync({ a: ok(1), b: boom })).rejects.toThrow("boom");
   });
 
   it("同期的な Result だけでも必ず Promise を返す", () => {
-    expect(rsltSequenceAsync([err("e")])).toBeInstanceOf(Promise);
-    expect(rsltCollectAsync([err("e")])).toBeInstanceOf(Promise);
+    expect(sequenceAsync([err("e")])).toBeInstanceOf(Promise);
+    expect(collectAsync([err("e")])).toBeInstanceOf(Promise);
   });
 });

@@ -2,23 +2,28 @@
  * 最小限の Result 型ライブラリ
  *
  * - Result は `{ type, value }` / `{ type, error }` の plain object (frozen)
- * - すべての関数を個別に export しているので、import した関数だけがバンドルに入る
+ * - すべての関数を個別に export しているので、使った関数だけがバンドルに入る
+ *   (`import * as rslt` で `rslt.map` のように使っても同じ)
  * - 変換関数はすべて data-first の同期関数。非同期は `flowAsync` か async/await で扱う
+ *
+ * よく使うもの (`ok`, `err`, `isOk`, `isErr`, `flow`, `flowAsync`, `sequence`, `collect`, 型) は名前で import し、
+ * それ以外は `import * as rslt` して `rslt.map` / `rslt.try` のように使う
  *
  * @example
  * ```typescript
- * import { isErr, isOk, rsltTry, rsltTryAsync, type Result, type ResultAsync } from "@nw-union/nw-utils/lib/result";
+ * import * as rslt from "@nw-union/nw-utils/lib/result";
+ * import { isErr, isOk, type Result, type ResultAsync } from "@nw-union/nw-utils/lib/result";
  *
  * const parse = (s: string): Result<number, Error> =>
- *   rsltTry(() => JSON.parse(s) as number, (e) => new Error(String(e)));
+ *   rslt.try(() => JSON.parse(s) as number, (e) => new Error(String(e)));
  *
- * const r = parse("1");
+ * const r = rslt.map(parse("1"), (n) => n + 1);
  * if (isOk(r)) console.log(r.value);
  *
  * const fetchUser = async (id: string): ResultAsync<User, AppError> => {
  *   const valid = validateId(id);
  *   if (isErr(valid)) return valid;
- *   return rsltTryAsync(() => api.get(valid.value), toAppError);
+ *   return rslt.tryAsync(() => api.get(valid.value), toAppError);
  * };
  * ```
  */

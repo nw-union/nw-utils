@@ -71,14 +71,14 @@ AppError (基底クラス)
 
 #### Result ライブラリ (lib/result/)
 
-外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。`import { err, isErr, ok, rsltMap, type Result } from "@nw-union/nw-utils/lib/result"` のように必要なものだけ import する。`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` 以外の関数は `rslt` から始まる名前。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `import * as rslt from "@nw-union/nw-utils/lib/result"` して `rslt.map` / `rslt.try` のように使う。
 
 - 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
-- 生成: `ok`, `err`, `rsltTry` (同期), `rsltTryAsync` (非同期)
+- 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
-- 変換: `rsltMap`, `rsltMapError`, `rsltAndThen`, `rsltOrElse` (すべて同期・data-first)
+- 変換: `rslt.map`, `rslt.mapError`, `rslt.andThen`, `rslt.orElse` (すべて同期・data-first)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
-- 集約: `rsltSequence` (最初の Failure), `rsltCollect` (全エラー), `rsltSequenceAsync`, `rsltCollectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
+- 集約: `sequence` (最初の Failure), `collect` (全エラー), `sequenceAsync`, `collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:
 
@@ -86,7 +86,7 @@ AppError (基底クラス)
 const f = async (id: string): ResultAsync<User, AppError> => {
   const valid = validateId(id);
   if (isErr(valid)) return valid;
-  return rsltTryAsync(() => fetchUser(valid.value), toAppError);
+  return rslt.tryAsync(() => fetchUser(valid.value), toAppError);
 };
 ```
 
