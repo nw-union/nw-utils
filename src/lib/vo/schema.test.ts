@@ -68,6 +68,29 @@ describe("検証 (文字列)", () => {
     expect(re.lastIndex).toBe(5);
   });
 
+  it("uuidv4", () => {
+    expect(isErr(v.uuidv4("123e4567-e89b-42d3-a456-426614174000"))).toBe(false);
+    expect(isErr(v.uuidv4("123E4567-E89B-42D3-A456-426614174000"))).toBe(false);
+    // バージョンが 4 でない
+    expect(isErr(v.uuidv4("123e4567-e89b-12d3-a456-426614174000"))).toBe(true);
+    // バリアントが不正
+    expect(isErr(v.uuidv4("123e4567-e89b-42d3-c456-426614174000"))).toBe(true);
+    expect(isErr(v.uuidv4("123e4567e89b42d3a456426614174000"))).toBe(true);
+    expect(message(v.uuidv4("abc"))).toBe('Invalid UUID v4: Received "abc"');
+  });
+
+  it("startsWith", () => {
+    const parser = v.startsWith("usr_");
+    expect(parser("usr_123")).toEqual(ok("usr_123"));
+    expect(parser("usr_")).toEqual(ok("usr_"));
+    expect(message(parser("grp_123"))).toBe(
+      'Invalid start: Expected "usr_" but received "grp_"',
+    );
+    expect(message(parser("us"))).toBe(
+      'Invalid start: Expected "usr_" but received "us"',
+    );
+  });
+
   it("email", () => {
     expect(isErr(v.email("a.b+c@example.co.jp"))).toBe(false);
     expect(isErr(v.email("a@b"))).toBe(true);

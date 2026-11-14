@@ -62,6 +62,8 @@ type Schema<O> = Parser<unknown, O>;                // unknown を受け取れ�
 | `v.nonEmpty` | 空文字列でない |
 | `v.regex(re)` | 正規表現に一致する |
 | `v.email` | メールアドレスの形式 (valibot と同じ正規表現) |
+| `v.uuidv4` | UUID v4 の形式 (バージョン 4、バリアント 8 / 9 / a / b。大文字小文字は問わない) |
+| `v.startsWith(s)` | s で始まる |
 
 ### 数値の検証
 
@@ -156,6 +158,8 @@ rslt.pipe(newEmail(input), rslt.mapErr(withName("userEmail")));
 | `nonEmpty` | `Invalid length: Expected !0 but received 0` |
 | `regex` | `Invalid format: Expected /^\d+$/ but received "a"` |
 | `email` | `Invalid email: Received "invalid"` |
+| `uuidv4` | `Invalid UUID v4: Received "abc"` |
+| `startsWith` | `Invalid start: Expected "usr_" but received "grp_"` |
 | `minValue` / `maxValue` | `Invalid value: Expected >=0 but received -1` |
 | `integer` | `Invalid integer: Received 1.5` |
 
@@ -167,10 +171,10 @@ rslt.pipe(newEmail(input), rslt.mapErr(withName("userEmail")));
 import { err, ok } from "@nw-union/nw-utils/lib/rslt";
 import { newVo, type Parser, v } from "@nw-union/nw-utils/lib/vo";
 
-const startsWithA: Parser<string, string> = (s) =>
-  s.startsWith("a") ? ok(s) : err({ message: "Must start with a" });
+const evenLength: Parser<string, string> = (s) =>
+  s.length % 2 === 0 ? ok(s) : err({ message: "Must have even length" });
 
-export const newCode = newVo("Code", v.chain(v.string, startsWithA));
+export const newCode = newVo("Code", v.chain(v.string, evenLength));
 ```
 
 ## lib/valibot からの移行
@@ -209,7 +213,7 @@ export const newCode = newVo("Code", v.chain(v.string, startsWithA));
 - **文字数**: `v.minLength` などは `String.prototype.length` (UTF-16 のコード単位) で数えます。絵文字などは 1 文字が 2 と数えられることがあります
 - **正規表現**: `v.regex` は渡した RegExp を書き換えません。`g` / `y` フラグ付きでも毎回先頭から判定します
 - **パーサーの数**: `v.chain` につなげられるパーサーは最大 10 個です。超える場合は `v.chain` を入れ子にします
-- **ないもの**: `object` / `array` / `optional` / `literal` / `picklist` / `transform` / `url` / `uuid` などはありません。エラーメッセージの上書きや、`ValidationError` への cause (`ValiError`) の連結もありません
+- **ないもの**: `object` / `array` / `optional` / `literal` / `picklist` / `transform` / `url` / v4 以外の `uuid` などはありません。エラーメッセージの上書きや、`ValidationError` への cause (`ValiError`) の連結もありません
 
 ## テストでの書き方
 
