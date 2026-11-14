@@ -20,6 +20,10 @@
       "types": "./dist/lib/uuid/index.d.ts",
       "default": "./dist/lib/uuid/index.js"
     },
+    "./lib/result": {
+      "types": "./dist/lib/result/index.d.ts",
+      "default": "./dist/lib/result/index.js"
+    },
     "./lib/zod": {
       "types": "./dist/lib/zod/index.d.ts",
       "default": "./dist/lib/zod/index.js"

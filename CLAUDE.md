@@ -24,6 +24,9 @@ src/
 ├── error.ts                  # カスタムエラークラス定義
 ├── interface.ts              # 共通インターフェース定義
 ├── lib/
+│   ├── result/               # Result 型ライブラリ
+│   │   ├── index.ts
+│   │   └── result.ts
 │   ├── uuid/                 # UUID 生成・変換ユーティリティ
 │   │   └── index.ts
 │   └── zod/                  # Zod バリデーションヘルパー
@@ -65,6 +68,26 @@ AppError (基底クラス)
 - 戻り値: `ResultAsync<string, AuthError>`
 
 ### ライブラリ機能
+
+#### Result ライブラリ (lib/result/)
+
+外部依存のない最小限の Result 型。`import { Result } from "@nw-union/nw-utils/lib/result"` で使う。
+
+- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
+- 生成: `succeed`, `fail`, `try` (同期), `tryAsync` (非同期)
+- 判定: `isSuccess`, `isFailure` (型ガード)
+- 変換: `map`, `mapError`, `andThen`, `orElse` (すべて同期・data-first)
+- 取り出し: `unwrap`, `unwrapError` (失敗時は throw。主にテスト用)
+
+非同期の合成は combinator ではなく async/await で書く:
+
+```typescript
+const f = async (id: string): Result.ResultAsync<User, AppError> => {
+  const valid = validateId(id);
+  if (Result.isFailure(valid)) return valid;
+  return Result.tryAsync(() => fetchUser(valid.value), toAppError);
+};
+```
 
 #### UUID ライブラリ (lib/uuid/)
 
@@ -130,6 +153,7 @@ const result = await auth.auth(request); // ResultAsync<string, AuthError>
 以下のサブパス export が利用可能です:
 
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
+- `@nw-union/nw-utils/lib/result` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
 - `@nw-union/nw-utils/adapter/auth-mock` - モック認証
