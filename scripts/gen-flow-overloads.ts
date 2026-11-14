@@ -1,6 +1,6 @@
 /**
  * src/lib/rslt/result.ts の flow / flowAsync / pipe と、
- * src/lib/valibot/schema.ts の pipe のオーバーロードを生成する
+ * src/lib/vldt/schema.ts の pipe のオーバーロードを生成する
  *
  * - `bun run gen`        : 生成してファイルを書き換える
  * - `bun run gen --check`: 生成結果とファイルが一致するか確認する (不一致なら exit 1)
@@ -8,7 +8,7 @@
  * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync / pipe も同様)
  */
 const RSLT_FILE = "src/lib/rslt/result.ts";
-const VALIBOT_FILE = "src/lib/valibot/schema.ts";
+const VLDT_FILE = "src/lib/vldt/schema.ts";
 const MAX = 10; // つなげられる関数の最大数
 
 const overloads = (name: "flow" | "flowAsync"): string => {
@@ -51,7 +51,7 @@ const pipeOverloads = (): string => {
   return lines.join("\n");
 };
 
-// valibot の pipe: Step を左から順につなげる (Step 1〜MAX 個)
+// vldt の pipe: Step を左から順につなげる (Step 1〜MAX 個)
 const stepPipeOverloads = (): string => {
   const lines: string[] = [];
   for (let n = 1; n <= MAX; n++) {
@@ -109,9 +109,9 @@ const targets: { file: string; build: (src: string) => string }[] = [
     },
   },
   {
-    file: VALIBOT_FILE,
+    file: VLDT_FILE,
     build: (src) =>
-      replaceBlock(VALIBOT_FILE, src, "pipe", stepPipeOverloads()),
+      replaceBlock(VLDT_FILE, src, "pipe", stepPipeOverloads()),
   },
 ];
 

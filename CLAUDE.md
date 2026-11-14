@@ -12,7 +12,7 @@ NWU のアプリケーションに使用する TypeScript ユーティリティ�
 - **Language**: TypeScript
 - **主要ライブラリ**:
   - `lib/rslt` (自前): Result 型による関数型エラーハンドリング (外部依存なし)
-  - `lib/valibot` (自前): valibot 互換の最小限のスキーマバリデーション (外部依存なし)
+  - `lib/vldt` (自前): valibot と同じ書き方の最小限のスキーマバリデーション (外部依存なし)
   - `zod`: スキーマバリデーション
   - `ts-pattern`: パターンマッチング
 - **Linter/Formatter**: Biome
@@ -30,7 +30,9 @@ src/
 │   │   └── result.ts
 │   ├── uuid/                 # UUID 生成・変換ユーティリティ
 │   │   └── index.ts
-│   ├── valibot/              # スキーマバリデーション + VO ヘルパー
+│   ├── valibot/              # valibot を使った VO ヘルパー
+│   │   └── index.ts
+│   ├── vldt/                 # 自前のスキーマバリデーション + VO ヘルパー
 │   │   ├── index.ts
 │   │   └── schema.ts
 │   └── zod/                  # Zod バリデーションヘルパー
@@ -126,9 +128,9 @@ export const newEmail = newType(email, "Email");
 const result = newEmail("test@example.com"); // Result<Email, ValidationError>
 ```
 
-#### Valibot 互換スキーマ (lib/valibot/)
+#### スキーマバリデーション (lib/vldt/)
 
-valibot に依存せず、valibot と同じ書き方でスキーマを作る最小限のライブラリ。詳細は `src/lib/valibot/README.md`。
+valibot に依存せず、valibot と同じ書き方でスキーマを作る最小限のライブラリ。`lib/valibot` (valibot を使う版) から依存をなくしたもの。詳細は `src/lib/vldt/README.md`。
 
 - スキーマ・検証はすべて `Step<I, O> = (input: I) => Result<O, Issue[]>` という関数
 - 部品は `v` 経由で使う: `string` / `number` / `boolean`, `minLength` / `maxLength` / `length` / `nonEmpty` / `regex` / `email`, `minValue` / `maxValue` / `integer`, `pipe` (最初の失敗で止まる) / `brand`, `parse`
@@ -136,7 +138,7 @@ valibot に依存せず、valibot と同じ書き方でスキーマを作る最�
 - VO ヘルパー: `newType(schema, type)`, `newVoOrNone(schema, type)` (空文字列を `ok(null)` にする)
 
 ```typescript
-import { newType, v } from "@nw-union/nw-utils/lib/valibot";
+import { newType, v } from "@nw-union/nw-utils/lib/vldt";
 
 const email = v.pipe(v.string(), v.email(), v.brand("Email"));
 export type Email = v.InferOutput<typeof email>;
@@ -180,7 +182,8 @@ const result = await auth.auth(request); // Result<User, AuthError>
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
 - `@nw-union/nw-utils/lib/rslt` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
-- `@nw-union/nw-utils/lib/valibot` - valibot 互換スキーマ + VO ヘルパー
+- `@nw-union/nw-utils/lib/vldt` - スキーマバリデーション + VO ヘルパー (外部依存なし)
+- `@nw-union/nw-utils/lib/valibot` - valibot 用 VO ヘルパー
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
 - `@nw-union/nw-utils/adapter/auth-mock` - モック認証
 - `@nw-union/nw-utils/adapter/auth-cloudflare` - Cloudflare 認証

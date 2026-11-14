@@ -1,11 +1,11 @@
-# @nw-union/nw-utils/lib/valibot
+# @nw-union/nw-utils/lib/vldt
 
 外部依存のない、最小限のスキーマバリデーションライブラリです。
 
-valibot と同じ名前・同じ書き方でスキーマを作り、`newType` で Value Object の生成関数に変換します。結果は `lib/rslt` の `Result` で返ります。
+valibot と同じ名前・同じ書き方でスキーマを作り、`newType` で Value Object の生成関数に変換します。結果は `lib/rslt` の `Result` で返ります。valibot を使う `lib/valibot` から、valibot への依存をなくしたものです。
 
 ```typescript
-import { newType, v } from "@nw-union/nw-utils/lib/valibot";
+import { newType, v } from "@nw-union/nw-utils/lib/vldt";
 
 const email = v.pipe(v.string(), v.email(), v.brand("Email"));
 export type Email = v.InferOutput<typeof email>;
@@ -147,19 +147,21 @@ error.details; // ['userEmail: Invalid email: Received "invalid"']
 | `minValue` / `maxValue` | `Invalid value: Expected >=0 but received -1` |
 | `integer` | `Invalid integer: Received 1.5` |
 
-## valibot からの移行
+## lib/valibot からの移行
 
 ```diff
 - import * as v from "valibot";
 - import { newType } from "@nw-union/nw-utils/lib/valibot";
-+ import { newType, v } from "@nw-union/nw-utils/lib/valibot";
++ import { newType, v } from "@nw-union/nw-utils/lib/vldt";
 ```
+
+`newType` / `newVoOrNone` の引数と戻り値、`ValidationError` の `message` / `details` の形は `lib/valibot` と同じです。
 
 次の点は valibot と違います。
 
 - `v.safeParse` はありません。`v.parse(schema, input)` が、例外を投げずに `Result` を返します
 - pipe は最初の失敗で止まるので、Issue は 1 件だけです
-- `ValidationError` の cause (スタックトレースに付いていた `ValiError`) はなくなりました
+- `ValidationError` に cause (スタックトレースに連結される `ValiError`) は付きません
 - エラーメッセージを引数で上書きすることはできません
 - 次の機能はありません: `object` / `array` / `optional` / `nullable` / `literal` / `picklist` / `trim` / `transform` / `check` / `url` / `uuid` など。必要になったら追加します
 
@@ -169,7 +171,7 @@ Step はただの関数なので、足りない検証は自分で書いて pipe 
 
 ```typescript
 import { err, ok } from "@nw-union/nw-utils/lib/rslt";
-import { type Step, v } from "@nw-union/nw-utils/lib/valibot";
+import { type Step, v } from "@nw-union/nw-utils/lib/vldt";
 
 const startsWithA: Step<string, string> = (s) =>
   s.startsWith("a") ? ok(s) : err([{ message: "Must start with a" }]);

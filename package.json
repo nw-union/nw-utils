@@ -7,6 +7,7 @@
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
     "prepublishOnly": "bun run build",
+    "test": "bun test",
     "check": "biome check --write src",
     "gen": "bun scripts/gen-flow-overloads.ts"
   },
@@ -29,6 +30,10 @@
     "./lib/zod": {
       "types": "./dist/lib/zod/index.d.ts",
       "default": "./dist/lib/zod/index.js"
+    },
+    "./lib/vldt": {
+      "types": "./dist/lib/vldt/index.d.ts",
+      "default": "./dist/lib/vldt/index.js"
     },
     "./lib/valibot": {
       "types": "./dist/lib/valibot/index.d.ts",
@@ -61,6 +66,7 @@
   },
   "dependencies": {
     "ts-pattern": "^5.9.0",
+    "valibot": "^1.3.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
