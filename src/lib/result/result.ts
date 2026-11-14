@@ -14,8 +14,14 @@ export type Result<T, E> = Success<T> | Failure<E>;
 /** 非同期の Result */
 export type ResultAsync<T, E> = Promise<Result<T, E>>;
 
-// Promise を返す関数を同期の try に渡せないようにするための型
-type NotPromise<T> = T extends PromiseLike<unknown> ? never : unknown;
+// Promise を返す関数を同期の try / flow に渡せないようにするための型
+// - union の一部でも Promise なら拒否する (`number | Promise<number>` も不可)
+// - any は判定できないので許可する (JSON.parse などを渡せるように)
+type NotPromise<T> = 0 extends 1 & T
+  ? unknown
+  : [Extract<T, PromiseLike<unknown>>] extends [never]
+    ? unknown
+    : never;
 
 // ----------------------------------------------------------------------------
 // 生成
@@ -117,10 +123,14 @@ type Val<X> =
 type Err<X> = X extends Failure<infer E> ? E : never;
 
 // 値が Result かどうかを形で判定する (型の Val / Err と同じ判定基準)
+// `ok()` / `ok(undefined)` は JSON を経由すると value が消えて `{ type: "Success" }` になるため、
+// type だけを持つ object も Success とみなす
 const isResult = (x: unknown): x is Result<unknown, unknown> => {
   if (typeof x !== "object" || x === null) return false;
   const t = (x as { type?: unknown }).type;
-  return (t === "Success" && "value" in x) || (t === "Failure" && "error" in x);
+  if (t === "Failure") return "error" in x;
+  if (t === "Success") return "value" in x || Object.keys(x).length === 1;
+  return false;
 };
 
 /**
@@ -139,6 +149,7 @@ const isResult = (x: unknown): x is Result<unknown, unknown> => {
  * // user: Result<User, AuthError>
  * ```
  */
+// <generated:flow> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
 export function flow<A, E, B1>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
@@ -266,6 +277,7 @@ export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
   | Err<B9>
   | Err<B10>
 >;
+// </generated:flow>
 export function flow(
   a: Result<unknown, unknown>,
   ...fns: ((v: unknown) => unknown)[]
@@ -291,6 +303,7 @@ export function flow(
  * // verifyToken: (token: string) => ResultAsync<Payload, AuthError>
  * ```
  */
+// <generated:flowAsync> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
 export function flowAsync<A, E, B1>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
@@ -445,6 +458,7 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
   | Err<Awaited<B9>>
   | Err<Awaited<B10>>
 >;
+// </generated:flowAsync>
 export async function flowAsync(
   a: Result<unknown, unknown> | ResultAsync<unknown, unknown>,
   ...fns: ((v: unknown) => unknown)[]
@@ -462,8 +476,11 @@ export async function flowAsync(
 // sequence / collect (複数の Result をまとめる)
 // ----------------------------------------------------------------------------
 
-// まとめる対象: Result の配列 (タプル) か、Result を値に持つオブジェクト
+// まとめる対象: Result の配列 (タプル) か、Result を値に持つオブジェクト (内部実装用)
 type ResultRecord<R> = readonly R[] | { readonly [key: string]: R };
+
+// 公開 API の引数の制約。T 自身のキーで判定するので、index signature を持たない interface も受け取れる
+type ShapeOf<T, R> = { readonly [K in keyof T]: R };
 
 // 配列なら要素、オブジェクトなら値の型
 type Item<T> = T extends readonly unknown[] ? T[number] : T[keyof T];
@@ -535,12 +552,13 @@ const awaitAll = async (
  * Result.sequence({ id: newId(x), mail: newEmail(y) }); // Result<{ id: Id; mail: Email }, ValidationError>
  * ```
  */
-export const sequence = <
-  const T extends ResultRecord<Result<unknown, unknown>>,
->(
+export const sequence = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
   x: T,
 ): Result<Values<T>, ErrOf<Item<T>>> =>
-  sequenceImpl(x) as Result<Values<T>, ErrOf<Item<T>>>;
+  sequenceImpl(x as ResultRecord<Result<unknown, unknown>>) as Result<
+    Values<T>,
+    ErrOf<Item<T>>
+  >;
 
 /**
  * 複数の Result をまとめる。すべて成功なら成功値をまとめた Result、失敗があればすべてのエラーを配列で返す
@@ -555,10 +573,13 @@ export const sequence = <
  * // Result<{ id: Id; mail: Email }, ValidationError[]>
  * ```
  */
-export const collect = <const T extends ResultRecord<Result<unknown, unknown>>>(
+export const collect = <const T extends ShapeOf<T, Result<unknown, unknown>>>(
   x: T,
 ): Result<Values<T>, ErrOf<Item<T>>[]> =>
-  collectImpl(x) as Result<Values<T>, ErrOf<Item<T>>[]>;
+  collectImpl(x as ResultRecord<Result<unknown, unknown>>) as Result<
+    Values<T>,
+    ErrOf<Item<T>>[]
+  >;
 
 /**
  * `sequence` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
@@ -573,16 +594,20 @@ export const collect = <const T extends ResultRecord<Result<unknown, unknown>>>(
  * ```
  */
 export const sequenceAsync = async <
-  const T extends ResultRecord<
+  const T extends ShapeOf<
+    T,
     Result<unknown, unknown> | ResultAsync<unknown, unknown>
   >,
 >(
   x: T,
 ): ResultAsync<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>> =>
-  sequenceImpl(await awaitAll(x)) as Result<
-    ValuesAsync<T>,
-    ErrOf<Awaited<Item<T>>>
-  >;
+  sequenceImpl(
+    await awaitAll(
+      x as ResultRecord<
+        Result<unknown, unknown> | ResultAsync<unknown, unknown>
+      >,
+    ),
+  ) as Result<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>>;
 
 /**
  * `collect` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
@@ -594,13 +619,17 @@ export const sequenceAsync = async <
  * ```
  */
 export const collectAsync = async <
-  const T extends ResultRecord<
+  const T extends ShapeOf<
+    T,
     Result<unknown, unknown> | ResultAsync<unknown, unknown>
   >,
 >(
   x: T,
 ): ResultAsync<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>[]> =>
-  collectImpl(await awaitAll(x)) as Result<
-    ValuesAsync<T>,
-    ErrOf<Awaited<Item<T>>>[]
-  >;
+  collectImpl(
+    await awaitAll(
+      x as ResultRecord<
+        Result<unknown, unknown> | ResultAsync<unknown, unknown>
+      >,
+    ),
+  ) as Result<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>[]>;

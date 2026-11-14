@@ -165,6 +165,7 @@ const result = await auth.auth(request); // ResultAsync<string, AuthError>
 ```bash
 bun run build        # TypeScript のビルド
 bun run check        # Biome による lint と format
+bun run gen          # lib/result の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
 ```
 
 ## 設計原則

@@ -114,6 +114,16 @@ describe("try / tryAsync", () => {
       ),
     ).toEqual(Result.err("boom"));
   });
+  it("一部だけ Promise を返す関数 (union) も渡せない (型エラー)", () => {
+    const maybe = (): number | Promise<number> => 1;
+    // @ts-expect-error union の一部が Promise
+    Result.try(maybe, String);
+  });
+
+  it("any を返す関数は渡せる", () => {
+    expect(Result.try(() => JSON.parse("1"), String)).toEqual(ok(1));
+  });
+
   it("try に Promise を返す関数は渡せない (型エラー)", () => {
     // @ts-expect-error 非同期関数は tryAsync を使う
     Result.try(async () => 1, String);
@@ -214,6 +224,16 @@ describe("flow", () => {
     expect(r).toEqual(err("data"));
   });
 
+  it("JSON を経由して value が消えた ok() も Result として扱う", () => {
+    const fromJson = JSON.parse(JSON.stringify(ok())); // { type: "Success" }
+    const r = flow(ok(1), () => fromJson);
+    expect(isOk(r)).toBe(true);
+    expect(isOk(r) && r.value).toBeUndefined();
+    // type 以外のキーを持つ場合は Result とみなさない
+    const other = flow(ok(1), () => ({ type: "Success", id: 1 }));
+    expect(other).toEqual(ok({ type: "Success", id: 1 }));
+  });
+
   it("10 個までつなげられる", () => {
     const inc = (n: number) => n + 1;
     const r = Result.flow(
@@ -230,6 +250,11 @@ describe("flow", () => {
       inc,
     );
     expect(r).toEqual(Result.ok(10));
+  });
+
+  it("一部だけ Promise を返す関数 (union) も渡せない (型エラー)", () => {
+    // @ts-expect-error union の一部が Promise
+    flow(ok(1), (n: number) => (n > 0 ? n : Promise.resolve(n)));
   });
 
   it("Promise を返す関数は渡せない (型エラー)", () => {
@@ -319,6 +344,36 @@ describe("sequence", () => {
     expect(r).toEqual(ok({ id: 1, name: "x" }));
   });
 
+  it("interface で型付けしたオブジェクトも受け取れる", () => {
+    interface Form {
+      id: Result.Result<number, string>;
+      name: Result.Result<string, Error>;
+    }
+    const form: Form = { id: ok(1), name: ok("x") };
+    const r = Result.sequence(form);
+    assertType<
+      Equal<
+        typeof r,
+        Result.Result<{ id: number; name: string }, string | Error>
+      >
+    >();
+    const c = Result.collect(form);
+    assertType<
+      Equal<
+        typeof c,
+        Result.Result<{ id: number; name: string }, (string | Error)[]>
+      >
+    >();
+    expect(r).toEqual(ok({ id: 1, name: "x" }));
+  });
+
+  it("Result 以外を含むものは渡せない (型エラー)", () => {
+    // 型のチェックだけを目的とするので、実行はしない
+    const _check = () =>
+      // @ts-expect-error 値が Result ではない
+      Result.sequence({ a: 1 });
+  });
+
   it("可変長の配列もまとめられる", () => {
     const list: Result.Result<number, string>[] = [ok(1), ok(2), ok(3)];
     const r = Result.sequence(list);
@@ -375,15 +430,34 @@ describe("sequenceAsync / collectAsync", () => {
     expect(await p).toEqual(ok({ user: "u", n: 1 }));
   });
 
-  it("並列に待つ (合計時間は最も遅いものと同程度)", async () => {
-    const start = Date.now();
-    const r = await Result.sequenceAsync([
-      later(30, ok(1)),
-      later(30, ok(2)),
-      later(30, ok(3)),
-    ]);
-    expect(r).toEqual(ok([1, 2, 3]));
-    expect(Date.now() - start).toBeLessThan(80);
+  it("完了の順番に関係なく、すべての完了を待ってから入力の形で返す", async () => {
+    // 手動で resolve できる Promise を使い、時間に依存せずに確かめる
+    const deferred = <T>() => {
+      let resolve!: (r: Result.Result<T, string>) => void;
+      const promise = new Promise<Result.Result<T, string>>((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const [d1, d2, d3] = [
+      deferred<number>(),
+      deferred<number>(),
+      deferred<number>(),
+    ];
+    let done = false;
+    const p = Result.sequenceAsync([d1.promise, d2.promise, d3.promise]).then(
+      (r) => {
+        done = true;
+        return r;
+      },
+    );
+    // 後ろから順に完了させる
+    d3.resolve(ok(3));
+    d2.resolve(ok(2));
+    await Promise.resolve();
+    expect(done).toBe(false); // まだ d1 が終わっていない
+    d1.resolve(ok(1));
+    expect(await p).toEqual(ok([1, 2, 3]));
   });
 
   it("sequenceAsync は先に終わった失敗ではなく、入力の順番で最初の Failure を返す", async () => {
@@ -404,6 +478,14 @@ describe("sequenceAsync / collectAsync", () => {
       Equal<typeof p, Result.ResultAsync<[never, number, never], string[]>>
     >();
     expect(await p).toEqual(err(["e1", "e3"]));
+  });
+
+  it("渡した Promise が reject したら、Failure ではなく reject する", async () => {
+    const boom = Promise.reject(new Error("boom"));
+    await expect(Result.sequenceAsync([ok(1), boom])).rejects.toThrow("boom");
+    await expect(Result.collectAsync({ a: ok(1), b: boom })).rejects.toThrow(
+      "boom",
+    );
   });
 
   it("同期的な Result だけでも必ず Promise を返す", () => {

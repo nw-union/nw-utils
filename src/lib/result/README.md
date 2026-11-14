@@ -13,7 +13,7 @@ import { err, flow, flowAsync, isErr, isOk, ok, Result } from "@nw-union/nw-util
 ## 特徴
 
 - **neverthrow に近い名前**: `ok(v)` / `err(e)` で作り、`isOk(r)` / `isErr(r)` で判定します
-- **plain object**: Result はクラスではなく、`{ type, value }` / `{ type, error }` だけを持つ frozen object です。JSON への変換やスプレッドをしても壊れません
+- **plain object**: Result はクラスではなく、`{ type, value }` / `{ type, error }` だけを持つ frozen object です。スプレッドや JSON への変換をしてもデータとして扱えます
 - **tree-shaking が効く**: すべて独立した関数なので、使った関数だけがバンドルに入ります (`import { ok, isOk }` でも `Result.ok` でも同じ)
 - **同期関数のみ**: 変換関数 (`map` など) はすべて同期です。非同期は `flowAsync` か async/await で書きます
 - **data-first**: `Result.map(result, fn)` のように、Result を第 1 引数に取ります
@@ -218,6 +218,20 @@ const auth = async (req: Request): Result.ResultAsync<User, AuthError> => {
 ```
 
 `ResultAsync` を返す関数は `async` 関数にしてください。どの分岐で return しても必ず Promise が返ります。
+
+## 実装上の注意
+
+### Object.freeze のコスト
+
+`ok` / `err` は作った Result を `Object.freeze` で書き換え不可にしています。型でも `readonly` にしていますが、JS から直接書き換えられる経路も塞ぐためです。
+
+その代わり、Result を作るたびに freeze の分だけわずかにコストがかかります。`flow` / `flowAsync` でも、値を返すステップごとに `ok` で包むので同じです。通常の用途では問題になりませんが、大量の Result をループで作るような処理 (CSV の全行の検証など) ではこの点を意識してください。
+
+### JSON を経由した Result
+
+`ok()` / `ok(undefined)` を JSON にすると、`value` が消えて `{"type":"Success"}` になります。`isOk` は `type` だけで判定するので、そのまま成功として扱えます。`flow` / `flowAsync` も、`type` だけを持つオブジェクトは Success として扱います。
+
+ただし `JSON.parse` の結果は `any` なので、型は保証されません。外部から受け取ったデータは、バリデーションしてから Result として使ってください。
 
 ## パターンマッチ
 
