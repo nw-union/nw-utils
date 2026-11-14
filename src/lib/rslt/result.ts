@@ -86,31 +86,145 @@ export const tryAsync = async <T, E>(
 };
 
 // ----------------------------------------------------------------------------
-// 変換 (すべて同期 / data-first)
-//   非同期処理の合成は flowAsync か、async/await と isErr による早期 return で書く
+// pipe / 変換 (data-last)
+//   rslt.map(fn) は「Result を受け取って変換する関数」を返す。pipe の中に並べて使う
+//   すべて同期。非同期処理の合成は flowAsync か、async/await と isErr による早期 return で書く
 // ----------------------------------------------------------------------------
 
-/** 成功値を変換する */
-export const map = <T, U, E>(r: Result<T, E>, fn: (v: T) => U): Result<U, E> =>
-  isOk(r) ? ok(fn(r.value)) : r;
+/**
+ * 値を、左から順に関数へ通す
+ *
+ * Result 専用ではなく、引数を 1 つ受け取る関数なら何でも並べられる。
+ * `rslt.map(fn)` などは「Result を受け取る関数」を返すので、そのまま並べられる
+ *
+ * @example
+ * ```typescript
+ * const r = pipe(
+ *   newEmail(input),                       // Result<Email, ValidationError>
+ *   rslt.map((email) => email.toLowerCase()),
+ *   rslt.andThen(findUserByEmail),         // (email) => Result<User, NotFoundError>
+ *   rslt.mapError((e) => toAppError(e)),
+ * );
+ * ```
+ */
+// <generated:pipe> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
+export function pipe<A>(a: A): A;
+export function pipe<A, B1>(a: A, f1: (v: A) => B1): B1;
+export function pipe<A, B1, B2>(a: A, f1: (v: A) => B1, f2: (v: B1) => B2): B2;
+export function pipe<A, B1, B2, B3>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+): B3;
+export function pipe<A, B1, B2, B3, B4>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+): B4;
+export function pipe<A, B1, B2, B3, B4, B5>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+  f5: (v: B4) => B5,
+): B5;
+export function pipe<A, B1, B2, B3, B4, B5, B6>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+  f5: (v: B4) => B5,
+  f6: (v: B5) => B6,
+): B6;
+export function pipe<A, B1, B2, B3, B4, B5, B6, B7>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+  f5: (v: B4) => B5,
+  f6: (v: B5) => B6,
+  f7: (v: B6) => B7,
+): B7;
+export function pipe<A, B1, B2, B3, B4, B5, B6, B7, B8>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+  f5: (v: B4) => B5,
+  f6: (v: B5) => B6,
+  f7: (v: B6) => B7,
+  f8: (v: B7) => B8,
+): B8;
+export function pipe<A, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+  f5: (v: B4) => B5,
+  f6: (v: B5) => B6,
+  f7: (v: B6) => B7,
+  f8: (v: B7) => B8,
+  f9: (v: B8) => B9,
+): B9;
+export function pipe<A, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
+  a: A,
+  f1: (v: A) => B1,
+  f2: (v: B1) => B2,
+  f3: (v: B2) => B3,
+  f4: (v: B3) => B4,
+  f5: (v: B4) => B5,
+  f6: (v: B5) => B6,
+  f7: (v: B6) => B7,
+  f8: (v: B7) => B8,
+  f9: (v: B8) => B9,
+  f10: (v: B9) => B10,
+): B10;
+// </generated:pipe>
+export function pipe(a: unknown, ...fns: ((v: unknown) => unknown)[]): unknown {
+  let cur = a;
+  for (const fn of fns) cur = fn(cur);
+  return cur;
+}
 
-/** エラーを変換する */
-export const mapError = <T, E, F>(
-  r: Result<T, E>,
-  fn: (e: E) => F,
-): Result<T, F> => (isErr(r) ? err(fn(r.error)) : r);
+/**
+ * 成功値を変換する関数を作る
+ *
+ * @example
+ * ```typescript
+ * pipe(ok(1), rslt.map((n) => n + 1)); // ok(2)
+ * rslt.map((n: number) => n + 1)(ok(1)); // 直接呼ぶ場合
+ * ```
+ */
+export const map =
+  <T, U>(fn: (v: T) => U) =>
+  <E>(r: Result<T, E>): Result<U, E> =>
+    isOk(r) ? ok(fn(r.value)) : r;
 
-/** 成功値から次の Result を返す処理につなげる */
-export const andThen = <T, U, E, F>(
-  r: Result<T, E>,
-  fn: (v: T) => Result<U, F>,
-): Result<U, E | F> => (isOk(r) ? fn(r.value) : r);
+/** エラーを変換する関数を作る */
+export const mapError =
+  <E, F>(fn: (e: E) => F) =>
+  <T>(r: Result<T, E>): Result<T, F> =>
+    isErr(r) ? err(fn(r.error)) : r;
 
-/** 失敗時に別の Result を返す処理にフォールバックする */
-export const orElse = <T, U, E, F>(
-  r: Result<T, E>,
-  fn: (e: E) => Result<U, F>,
-): Result<T | U, F> => (isErr(r) ? fn(r.error) : r);
+/** 成功値を、Result を返す処理につなげる関数を作る */
+export const andThen =
+  <T, U, F>(fn: (v: T) => Result<U, F>) =>
+  <E>(r: Result<T, E>): Result<U, E | F> =>
+    isOk(r) ? fn(r.value) : r;
+
+/** 失敗時に、別の Result を返す処理で回復を試みる関数を作る */
+export const orElse =
+  <E, U, F>(fn: (e: E) => Result<U, F>) =>
+  <T>(r: Result<T, E>): Result<T | U, F> =>
+    isErr(r) ? fn(r.error) : r;
 
 // ----------------------------------------------------------------------------
 // flow (関数の連結)
@@ -523,20 +637,24 @@ export const throughAsync =
   };
 
 /**
- * Result の成功値を使って処理を実行し、元の Result をそのまま返す (data-first 版の through)
+ * 成功値を使って処理を実行し、元の Result をそのまま返す関数を作る (pipe 用)
  *
- * neverthrow の `andThrough` / `andTee` に相当する
+ * neverthrow の `andThrough` / `andTee` に相当する。flow の中では `through` を使う
+ * (flow の関数は成功値を受け取り、pipe の関数は Result を受け取るため)
+ *
+ * - fn が Failure を返したら、その Failure を返す
+ * - fn が void / 成功の Result / それ以外の値を返したら、元の Result をそのまま返す
  *
  * @example
  * ```typescript
- * const r = rslt.andThrough(newEmail(input), checkNotBlocked);
+ * pipe(newEmail(input), rslt.andThrough(checkNotBlocked));
  * // Result<Email, ValidationError | BlockedError>  (成功なら newEmail の結果がそのまま)
  * ```
  */
-export const andThrough = <T, E, R>(
-  r: Result<T, E>,
-  fn: (v: T) => R & NotPromise<R>,
-): Result<T, E | Err<R>> => (isErr(r) ? r : through<T, R>(fn)(r.value));
+export const andThrough =
+  <T, R>(fn: (v: T) => R & NotPromise<R>) =>
+  <E>(r: Result<T, E>): Result<T, E | Err<R>> =>
+    isErr(r) ? r : through<T, R>(fn)(r.value);
 
 // ----------------------------------------------------------------------------
 // sequence / collect (複数の Result をまとめる)

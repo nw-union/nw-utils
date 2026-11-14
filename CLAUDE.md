@@ -71,14 +71,15 @@ AppError (基底クラス)
 
 #### Result ライブラリ (lib/rslt/)
 
-外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う (`import { isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt"`)。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数として export して tree-shaking を効かせている。よく使うもの (`ok` / `err` / `isOk` / `isErr` / `pipe` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` と型 `Result` / `ResultAsync`) は名前で import し、それ以外は `rslt` を import して `rslt.map` / `rslt.try` のように使う (`import { isErr, ok, pipe, rslt, type Result } from "@nw-union/nw-utils/lib/rslt"`)。
 
 - 型: `Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
 - 生成: `ok`, `err`, `rslt.try` (同期), `rslt.tryAsync` (非同期)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
-- 変換: `rslt.map`, `rslt.mapError`, `rslt.andThen`, `rslt.orElse` (すべて同期・data-first)
+- 変換: `rslt.map`, `rslt.mapError`, `rslt.andThen`, `rslt.orElse`, `rslt.andThrough` (すべて同期・data-last。`rslt.map(fn)` は Result を受け取る関数を返し、`pipe(r, rslt.map(fn), ...)` のように使う)
+- `pipe`: 値を左から順に関数へ通す (最大 10 個)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
-- 素通り: `through` (flow 用), `throughAsync` (flowAsync 用), `rslt.andThrough` (関数の戻り値を捨てて直前の成功値をそのまま渡す。Failure なら止まる)
+- 素通り: `through` (flow 用), `throughAsync` (flowAsync 用), `rslt.andThrough` (pipe 用) (関数の戻り値を捨てて直前の成功値をそのまま渡す。Failure なら止まる)
 - 集約: `sequence` (最初の Failure), `collect` (全エラー), `sequenceAsync`, `collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:
@@ -166,7 +167,7 @@ const result = await auth.auth(request); // Result<User, AuthError>
 ```bash
 bun run build        # TypeScript のビルド
 bun run check        # Biome による lint と format
-bun run gen          # lib/rslt の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
+bun run gen          # lib/rslt の flow / flowAsync / pipe のオーバーロードを再生成 (--check で差分確認)
 ```
 
 ## 設計原則

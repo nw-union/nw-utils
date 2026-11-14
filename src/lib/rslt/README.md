@@ -5,12 +5,12 @@
 例外を投げる代わりに「成功」か「失敗」かを値として返し、エラーを型で明示的に扱えるようにします。
 
 ```typescript
-import { err, isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt";
+import { err, isErr, ok, pipe, rslt, type Result } from "@nw-union/nw-utils/lib/rslt";
 
-const r: Result<number, Error> = rslt.map(ok(1), (n) => n + 1);
+const r: Result<number, Error> = pipe(ok(1), rslt.map((n) => n + 1));
 ```
 
-- よく使うもの (`ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` と型) は名前で import します
+- よく使うもの (`ok` / `err` / `isOk` / `isErr` / `pipe` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` と型) は名前で import します
 - それ以外 (`map` / `mapError` / `andThen` / `orElse` / `try` / `tryAsync` など) は `rslt` を import して `rslt.map` のように使います。`map` のような一般的な名前を直接 import すると利用側の名前とぶつかりやすく、`try` は予約語なので単独の名前としては import できないためです
 
 ## 特徴
@@ -19,7 +19,7 @@ const r: Result<number, Error> = rslt.map(ok(1), (n) => n + 1);
 - **plain object**: Result はクラスではなく、`{ type, value }` / `{ type, error }` だけを持つ frozen object です。スプレッドや JSON への変換をしてもデータとして扱えます
 - **tree-shaking が効く**: すべて独立した関数として export しているので、import した関数 (と、その関数が内部で使う関数) だけがバンドルに入ります。`rslt.map` のように `rslt` 経由で使っても同じです。`ok` と `isOk` だけなら 113 bytes、全部入りでも約 1.8KB (minify 後)
 - **同期関数のみ**: 変換関数 (`rslt.map` など) はすべて同期です。非同期は `flowAsync` か async/await で書きます
-- **data-first**: `rslt.map(result, fn)` のように、Result を第 1 引数に取ります
+- **data-last**: `rslt.map(fn)` は「Result を受け取って変換する関数」を返します。`pipe` の中に並べて使います
 - **外部依存なし**: 実装は 1 ファイルです
 
 ## 型
@@ -101,32 +101,63 @@ const toUser = (r: Result<string, AuthError>): Result<User, AuthError> => {
 };
 ```
 
-### 変換
+### 変換 (pipe)
 
-| 関数 | 説明 |
-| --- | --- |
-| `rslt.map(r, fn)` | 成功値を `fn` で変換する。失敗ならそのまま |
-| `rslt.mapError(r, fn)` | エラーを `fn` で変換する。成功ならそのまま |
-| `rslt.andThen(r, fn)` | 成功値を Result を返す `fn` に渡す。失敗ならそのまま |
-| `rslt.orElse(r, fn)` | 失敗時に Result を返す `fn` でフォールバックする。成功ならそのまま |
+変換関数は、関数を渡すと「Result を受け取って変換する関数」を返します (data-last)。`pipe` で Result を左から順に通して使います。
+
+`r` は `Result<T, E>` とします。
+
+| # | 関数 | f の型 | 最終的に返すもの | 動き |
+| --- | --- | --- | --- | --- |
+| 1 | `rslt.map(f)` | `T => U` | `Result<U, E>` | 成功値を変換する |
+| 2 | `rslt.andThen(f)` | `T => Result<U, F>` | `Result<U, E \| F>` | 成功値を、Result を返す処理につなげる。`f` が Failure ならその Failure を返す |
+| 3 | `rslt.andThrough(f)` | `T => Result<unknown, F> \| void` | `Result<T, E \| F>` | `f` を実行する。`f` が Failure ならその Failure、それ以外なら元の成功値を返す |
+| 4 | `rslt.mapError(f)` | `E => F` | `Result<T, F>` | エラーを変換する |
+| 5 | `rslt.orElse(f)` | `E => Result<U, F>` | `Result<T \| U, F>` | 失敗時に、別の Result で回復を試みる |
+
+1〜3 は、`r` が Failure なら `f` を呼ばずに元の Failure を返します。4・5 は、`r` が Success なら `f` を呼ばずに元の Success を返します。
 
 ```typescript
-// map: 成功値を変換
-rslt.map(toShortUuid(uuid), (s) => s.toUpperCase());
+const r = pipe(
+  newEmail(input),                          // Result<Email, ValidationError>
+  rslt.map((email) => email.toLowerCase()), // 引数の型は直前の成功値から推論される
+  rslt.andThrough(checkNotBlocked),         // (email) => Result<void, BlockedError>
+  rslt.andThen(findUserByEmail),            // (email) => Result<User, NotFoundError>
+  rslt.mapError((e) => toAppError(e)),
+);
+// r: Result<User, AppError>
 
-// mapError: エラーの種類を変える
-rslt.mapError(parsed, (e) => new SystemError(e.message, [], e));
-
-// andThen: Result を返す処理をつなげる (エラー型は E | F になる)
-rslt.andThen(base64UrlDecode(short), bytesToUuid);
-
-// orElse: 失敗したら別の方法を試す
-rslt.orElse(getTokenFromHeader(req, "Authorization"), () =>
-  getTokenFromCookie(req, "token"),
+// 失敗したら別の方法を試す
+const token = pipe(
+  getTokenFromHeader(req, "Authorization"),
+  rslt.orElse(() => getTokenFromCookie(req, "token")),
 );
 ```
 
-3 つ以上の処理をつなげる場合は、次の `flow` / `flowAsync` を使います。
+`pipe` は Result 専用ではなく、引数を 1 つ受け取る関数なら何でも並べられます (最大 10 個)。
+
+`rslt.map(f)` などは、`pipe` を使わずに直接呼ぶこともできます。その場合は、`f` の引数の型を書く必要があります (どの Result に使われるか、作った時点では分からないため)。
+
+```typescript
+const double = rslt.map((n: number) => n * 2); // (r: Result<number, E>) => Result<number, E>
+double(ok(3)); // ok(6)
+rslt.map((n: number) => n + 1)(ok(1)); // ok(2)
+```
+
+#### pipe と flow の使い分け
+
+| | `pipe` | `flow` / `flowAsync` |
+| --- | --- | --- |
+| 並べる関数 | `rslt.map(f)` など、**Result を受け取る**関数 | **成功値を受け取る**普通の関数 |
+| `map` / `andThen` の区別 | `rslt.map` / `rslt.andThen` で明示する | 戻り値が Result かどうかで自動で決まる |
+| 失敗側の処理 (`mapError` / `orElse`) | 途中に書ける | 書けない (結果に対して `pipe` などで行う) |
+| 非同期 | なし (同期のみ) | `flowAsync` |
+
+```typescript
+// 同じ処理を pipe と flow で書く
+pipe(ok(req), rslt.andThen(getToken), rslt.map(tokenToUser));
+flow(ok(req), getToken, tokenToUser);
+```
 
 ### 関数の連結 (flow / flowAsync)
 
@@ -194,10 +225,10 @@ const user2 = await flowAsync(ok(req), getToken, throughAsync(saveAccessLog), to
 // user2: Result<User, AuthError | DbError>
 ```
 
-`flow` を使わずに 1 つの Result に対して実行したい場合は `rslt.andThrough(r, fn)` を使います (neverthrow の `andThrough` / `andTee` に相当)。
+`pipe` の中では、同じ動きの `rslt.andThrough(fn)` を使います (neverthrow の `andThrough` / `andTee` に相当)。`flow` の関数は成功値を受け取り、`pipe` の関数は Result を受け取るため、使い分けが必要です。
 
 ```typescript
-const r = rslt.andThrough(newEmail(input), checkNotBlocked);
+const r = pipe(newEmail(input), rslt.andThrough(checkNotBlocked));
 // 成功なら newEmail の結果がそのまま返る。checkNotBlocked が Failure を返したらその Failure
 ```
 
@@ -256,7 +287,7 @@ const auth = async (req: Request): ResultAsync<User, AuthError> => {
   if (isErr(payload)) return payload;
 
   // step.3 同期の変換
-  return rslt.map(payload, toUser);
+  return pipe(payload, rslt.map(toUser));
 };
 ```
 
@@ -308,17 +339,17 @@ if (isErr(r)) expect(r.error.code).toBe("Validation Error");
 | --- | --- | --- |
 | `ok(v)` / `err(e)` | `Result.succeed(v)` / `Result.fail(e)` | `ok(v)` / `err(e)` |
 | `r.isOk()` / `r.isErr()` | `Result.isSuccess(r)` / `Result.isFailure(r)` | `isOk(r)` / `isErr(r)` |
-| `r.map(f)` | `Result.pipe(r, Result.map(f))` | `rslt.map(r, f)` |
-| `r.mapErr(f)` | `Result.pipe(r, Result.mapError(f))` | `rslt.mapError(r, f)` |
-| `r.andThen(f)` | `Result.pipe(r, Result.andThen(f))` | `rslt.andThen(r, f)` |
-| `r.orElse(f)` | `Result.pipe(r, Result.orElse(f))` | `rslt.orElse(r, f)` |
+| `r.map(f)` | `Result.pipe(r, Result.map(f))` | `pipe(r, rslt.map(f))` |
+| `r.mapErr(f)` | `Result.pipe(r, Result.mapError(f))` | `pipe(r, rslt.mapError(f))` |
+| `r.andThen(f)` | `Result.pipe(r, Result.andThen(f))` | `pipe(r, rslt.andThen(f))` |
+| `r.orElse(f)` | `Result.pipe(r, Result.orElse(f))` | `pipe(r, rslt.orElse(f))` |
 | `Result.fromThrowable(fn, onErr)()` | `Result.try({ try, catch })` | `rslt.try(fn, onError)` |
 | `ResultAsync.fromPromise(p, onErr)` | `Result.try({ try, catch })` | `rslt.tryAsync(fn, onError)` |
 | `Result.combine([...])` | `Result.sequence(x)` | `sequence(x)` |
 | `Result.combineWithAllErrors([...])` | `Result.collect(x)` | `collect(x)` |
 | `ResultAsync.combine([...])` | `Result.sequence(x)` | `sequenceAsync(x)` |
 | `ResultAsync.combineWithAllErrors([...])` | `Result.collect(x)` | `collectAsync(x)` |
-| `r.andThrough(f)` / `r.andTee(f)` | `Result.pipe(r, Result.andThrough(f))` | `rslt.andThrough(r, f)` / `flow` の中では `through(f)` |
+| `r.andThrough(f)` / `r.andTee(f)` | `Result.pipe(r, Result.andThrough(f))` | `pipe(r, rslt.andThrough(f))` / `flow` の中では `through(f)` |
 | `r._unsafeUnwrap()` | `Result.unwrap(r)` | なし (`toEqual(ok(v))` か `isOk` で絞り込む) |
 | `ok(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `flow(r, f, g)` |
 | `okAsync(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `flowAsync(r, f, g)` |

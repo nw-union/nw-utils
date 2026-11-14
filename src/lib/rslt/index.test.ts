@@ -9,6 +9,7 @@ import {
   isErr,
   isOk,
   ok,
+  pipe,
   type Result,
   type ResultAsync,
   rslt,
@@ -86,14 +87,84 @@ describe("isOk / isErr", () => {
   });
 });
 
+describe("pipe", () => {
+  it("値を左から順に関数へ通す (Result 以外でも使える)", () => {
+    expect(pipe(1)).toBe(1);
+    expect(
+      pipe(
+        2,
+        (n) => n + 1,
+        (n) => n * 3,
+        (n) => `v${n}`,
+      ),
+    ).toBe("v9");
+  });
+
+  it("rslt.map などを並べると、引数の型が推論され、エラー型が足される", () => {
+    const check = (n: number): Result<string, "small"> =>
+      n > 5 ? ok(String(n)) : err("small");
+    const r = pipe(
+      ok1,
+      rslt.map((n) => n * 10),
+      rslt.andThen(check),
+      rslt.mapError((e) => ({ reason: e })),
+    );
+    assertType<Equal<typeof r, Result<string, { reason: string | "small" }>>>();
+    expect(r).toEqual(ok("10"));
+  });
+
+  it("型が合わない関数を並べると型エラーになる", () => {
+    const _check = () =>
+      pipe(
+        ok1,
+        // @ts-expect-error number の Result に string を受け取る関数
+        rslt.map((s: string) => s.length),
+      );
+  });
+
+  it("10 個までつなげられる", () => {
+    const inc = rslt.map((n: number) => n + 1);
+    expect(
+      pipe(ok(0), inc, inc, inc, inc, inc, inc, inc, inc, inc, inc),
+    ).toEqual(ok(10));
+  });
+});
+
 describe("map / mapError", () => {
   it("map は成功値のみ変換する", () => {
-    expect(rslt.map(ok1, (n) => n + 1)).toEqual(ok(2));
-    expect(rslt.map(ng, (n) => n + 1)).toBe(ng);
+    expect(
+      pipe(
+        ok1,
+        rslt.map((n) => n + 1),
+      ),
+    ).toEqual(ok(2));
+    expect(
+      pipe(
+        ng,
+        rslt.map((n) => n + 1),
+      ),
+    ).toBe(ng);
   });
   it("mapError はエラーのみ変換する", () => {
-    expect(rslt.mapError(ng, (e) => e.length)).toEqual(err(2));
-    expect(rslt.mapError(ok1, (e) => e.length)).toEqual(ok(1));
+    expect(
+      pipe(
+        ng,
+        rslt.mapError((e) => e.length),
+      ),
+    ).toEqual(err(2));
+    expect(
+      pipe(
+        ok1,
+        rslt.mapError((e) => e.length),
+      ),
+    ).toEqual(ok(1));
+  });
+  it("pipe を使わずに、作った関数を直接呼べる", () => {
+    const double = rslt.map((n: number) => n * 2);
+    const r = double(ok1);
+    assertType<Equal<typeof r, Result<number, string>>>();
+    expect(r).toEqual(ok(2));
+    expect(rslt.map((n: number) => n + 1)(ok(1))).toEqual(ok(2));
   });
 });
 
@@ -101,18 +172,31 @@ describe("andThen / orElse", () => {
   const half = (n: number): Result<number, string> =>
     n % 2 === 0 ? ok(n / 2) : err("odd");
   it("andThen は成功時のみ次を実行する", () => {
-    expect(rslt.andThen(ok(4), half)).toEqual(ok(2));
-    expect(rslt.andThen(ok(3), half)).toEqual(err("odd"));
+    expect(pipe(ok(4), rslt.andThen(half))).toEqual(ok(2));
+    expect(pipe(ok(3), rslt.andThen(half))).toEqual(err("odd"));
     let called = false;
-    rslt.andThen(ng, (n) => {
-      called = true;
-      return half(n);
-    });
+    pipe(
+      ng,
+      rslt.andThen((n) => {
+        called = true;
+        return half(n);
+      }),
+    );
     expect(called).toBe(false);
   });
   it("orElse は失敗時のみフォールバックする", () => {
-    expect(rslt.orElse(ng, () => ok(0))).toEqual(ok(0));
-    expect(rslt.orElse(ok1, () => ok(0))).toEqual(ok(1));
+    expect(
+      pipe(
+        ng,
+        rslt.orElse(() => ok(0)),
+      ),
+    ).toEqual(ok(0));
+    expect(
+      pipe(
+        ok1,
+        rslt.orElse(() => ok(0)),
+      ),
+    ).toEqual(ok(1));
   });
 });
 
@@ -564,25 +648,32 @@ describe("throughAsync", () => {
 describe("andThrough", () => {
   it("成功なら fn を実行して元の Result を返す", () => {
     const seen: number[] = [];
-    const r = rslt.andThrough(ok(1), (n) => {
-      seen.push(n);
-    });
+    const r = pipe(
+      ok(1),
+      rslt.andThrough((n) => {
+        seen.push(n);
+      }),
+    );
     expect(r).toEqual(ok(1));
     expect(seen).toEqual([1]);
   });
 
   it("fn が Failure を返したらその Failure、元が Failure なら fn を呼ばない", () => {
     const src: Result<number, string> = ok(1);
-    const r = rslt.andThrough(src, (n) =>
-      n > 0 ? err(new DbError("db")) : ok(),
+    const r = pipe(
+      src,
+      rslt.andThrough((n) => (n > 0 ? err(new DbError("db")) : ok())),
     );
     assertType<Equal<typeof r, Result<number, string | DbError>>>();
     expect(isErr(r) && r.error).toBeInstanceOf(DbError);
 
     let called = false;
-    rslt.andThrough(err("ng"), () => {
-      called = true;
-    });
+    pipe(
+      err("ng"),
+      rslt.andThrough(() => {
+        called = true;
+      }),
+    );
     expect(called).toBe(false);
   });
 });

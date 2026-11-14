@@ -5,6 +5,7 @@ import {
   flowAsync,
   isErr,
   ok,
+  pipe,
   type Result,
   type ResultAsync,
   rslt,
@@ -301,6 +302,7 @@ const AUTH_COOKIE_KEY = "CF_Authorization";
  * どちらでも取得できなければエラーを返す
  */
 const getToken = (req: Request): Result<string, AuthError> =>
-  rslt.orElse(getTokenFromHeader(req, AUTH_HEADER_KEY), () =>
-    getTokenFromCookie(req, AUTH_COOKIE_KEY),
+  pipe(
+    getTokenFromHeader(req, AUTH_HEADER_KEY),
+    rslt.orElse(() => getTokenFromCookie(req, AUTH_COOKIE_KEY)),
   );
