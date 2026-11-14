@@ -71,13 +71,12 @@ AppError (基底クラス)
 
 #### Result ライブラリ (lib/result/)
 
-外部依存のない最小限の Result 型。書き味は neverthrow に寄せている。`import { err, ok, Result } from "@nw-union/nw-utils/lib/result"` で使う。
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数にして tree-shaking を効かせている。`import { err, flow, flowAsync, isErr, isOk, ok, Result } from "@nw-union/nw-utils/lib/result"` で使う (それ以外の関数は `Result.map` のように使う)。
 
-- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の frozen object。メソッドは共有プロトタイプに持つ), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
-- 生成: `ok`, `err`, `try` (同期), `tryAsync` (非同期)
-- 判定: `r.isOk()`, `r.isErr()` (型ガード)
-- 変換: `map`, `mapError`, `andThen`, `orElse` (すべて同期・data-first)
-- 取り出し: `r.unwrap()`, `r.unwrapError()` (失敗時は throw。主にテスト用)
+- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
+- 生成: `ok`, `err`, `Result.try` (同期), `Result.tryAsync` (非同期)
+- 判定: `isOk(r)`, `isErr(r)` (型ガード)
+- 変換: `Result.map`, `Result.mapError`, `Result.andThen`, `Result.orElse` (すべて同期・data-first)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
 
 非同期の合成は `flowAsync`、または async/await で書く:
@@ -85,7 +84,7 @@ AppError (基底クラス)
 ```typescript
 const f = async (id: string): Result.ResultAsync<User, AppError> => {
   const valid = validateId(id);
-  if (valid.isErr()) return valid;
+  if (isErr(valid)) return valid;
   return Result.tryAsync(() => fetchUser(valid.value), toAppError);
 };
 ```

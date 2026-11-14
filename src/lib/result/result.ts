@@ -2,29 +2,11 @@
 // 型定義
 // ----------------------------------------------------------------------------
 
-/** Success / Failure 共通のメソッド */
-interface ResultMethods {
-  /** 成功かどうか (型ガード) */
-  isOk<T, E>(this: Result<T, E>): this is Success<T>;
-  /** 失敗かどうか (型ガード) */
-  isErr<T, E>(this: Result<T, E>): this is Failure<E>;
-  /** 成功値を取り出す。失敗の場合は error を throw する (主にテスト用) */
-  unwrap<T, E>(this: Result<T, E>): T;
-  /** エラーを取り出す。成功の場合は throw する (主にテスト用) */
-  unwrapError<T, E>(this: Result<T, E>): E;
-}
-
 /** 成功を表す値 */
-export type Success<T> = ResultMethods & {
-  readonly type: "Success";
-  readonly value: T;
-};
+export type Success<T> = { readonly type: "Success"; readonly value: T };
 
 /** 失敗を表す値 */
-export type Failure<E> = ResultMethods & {
-  readonly type: "Failure";
-  readonly error: E;
-};
+export type Failure<E> = { readonly type: "Failure"; readonly error: E };
 
 /** 成功 または 失敗 */
 export type Result<T, E> = Success<T> | Failure<E>;
@@ -39,51 +21,28 @@ type NotPromise<T> = T extends PromiseLike<unknown> ? never : unknown;
 // 生成
 // ----------------------------------------------------------------------------
 
-// ok / err で作った Result であることを示す印 (パッケージが重複しても一致するよう Symbol.for を使う)
-const BRAND = Symbol.for("@nw-union/nw-utils/result");
-
-// すべての Result が共有するプロトタイプ。メソッドはここにだけ持つ
-type Self = { type: string; value?: unknown; error?: unknown };
-const proto = {
-  [BRAND]: true,
-  isOk(this: Self) {
-    return this.type === "Success";
-  },
-  isErr(this: Self) {
-    return this.type === "Failure";
-  },
-  unwrap(this: Self) {
-    if (this.type === "Failure") throw this.error;
-    return this.value;
-  },
-  unwrapError(this: Self) {
-    if (this.type === "Success") {
-      throw new Error("Called unwrapError on a Success");
-    }
-    return this.error;
-  },
-} as const;
-
 /** 成功の Result を作る */
 export function ok(): Result<void, never>;
 export function ok<T>(value: T): Result<T, never>;
 export function ok<T>(value?: T): Result<T | undefined, never> {
-  return Object.freeze(
-    Object.assign(Object.create(proto), { type: "Success", value }),
-  );
+  return Object.freeze({ type: "Success", value });
 }
 
 /** 失敗の Result を作る */
 export const err = <E>(error: E): Result<never, E> =>
-  Object.freeze(
-    Object.assign(Object.create(proto), { type: "Failure", error }),
-  );
+  Object.freeze({ type: "Failure", error });
 
-// ok / err で作られた Result かどうか
-const isResult = (x: unknown): x is Result<unknown, unknown> =>
-  typeof x === "object" &&
-  x !== null &&
-  (x as { [BRAND]?: unknown })[BRAND] === true;
+// ----------------------------------------------------------------------------
+// 判定
+// ----------------------------------------------------------------------------
+
+/** 成功かどうか (型ガード) */
+export const isOk = <T, E>(r: Result<T, E>): r is Success<T> =>
+  r.type === "Success";
+
+/** 失敗かどうか (型ガード) */
+export const isErr = <T, E>(r: Result<T, E>): r is Failure<E> =>
+  r.type === "Failure";
 
 /**
  * 例外を投げうる同期関数を実行し、Result に変換する
@@ -121,30 +80,30 @@ export const tryAsync = async <T, E>(
 
 // ----------------------------------------------------------------------------
 // 変換 (すべて同期 / data-first)
-//   非同期処理の合成は flowAsync か、async/await と isErr() による早期 return で書く
+//   非同期処理の合成は flowAsync か、async/await と isErr による早期 return で書く
 // ----------------------------------------------------------------------------
 
 /** 成功値を変換する */
 export const map = <T, U, E>(r: Result<T, E>, fn: (v: T) => U): Result<U, E> =>
-  r.isOk() ? ok(fn(r.value)) : r;
+  isOk(r) ? ok(fn(r.value)) : r;
 
 /** エラーを変換する */
 export const mapError = <T, E, F>(
   r: Result<T, E>,
   fn: (e: E) => F,
-): Result<T, F> => (r.isErr() ? err(fn(r.error)) : r);
+): Result<T, F> => (isErr(r) ? err(fn(r.error)) : r);
 
 /** 成功値から次の Result を返す処理につなげる */
 export const andThen = <T, U, E, F>(
   r: Result<T, E>,
   fn: (v: T) => Result<U, F>,
-): Result<U, E | F> => (r.isOk() ? fn(r.value) : r);
+): Result<U, E | F> => (isOk(r) ? fn(r.value) : r);
 
 /** 失敗時に別の Result を返す処理にフォールバックする */
 export const orElse = <T, U, E, F>(
   r: Result<T, E>,
   fn: (e: E) => Result<U, F>,
-): Result<T | U, F> => (r.isErr() ? fn(r.error) : r);
+): Result<T | U, F> => (isErr(r) ? fn(r.error) : r);
 
 // ----------------------------------------------------------------------------
 // flow (関数の連結)
@@ -157,6 +116,13 @@ type Val<X> =
 // 関数の戻り値 X から、エラーの型を求める (Failure を含まなければ never)
 type Err<X> = X extends Failure<infer E> ? E : never;
 
+// 値が Result かどうかを形で判定する (型の Val / Err と同じ判定基準)
+const isResult = (x: unknown): x is Result<unknown, unknown> => {
+  if (typeof x !== "object" || x === null) return false;
+  const t = (x as { type?: unknown }).type;
+  return (t === "Success" && "value" in x) || (t === "Failure" && "error" in x);
+};
+
 /**
  * Result に関数を順に適用する
  *
@@ -167,7 +133,7 @@ type Err<X> = X extends Failure<infer E> ? E : never;
  *
  * @example
  * ```typescript
- * const user = Result.flow(Result.ok(req), getToken, tokenToUser);
+ * const user = Result.flow(ok(req), getToken, tokenToUser);
  * // getToken: (req: Request) => Result<string, AuthError>
  * // tokenToUser: (token: string) => User
  * // user: Result<User, AuthError>
@@ -306,7 +272,7 @@ export function flow(
 ): Result<unknown, unknown> {
   let cur = a;
   for (const fn of fns) {
-    if (cur.isErr()) return cur;
+    if (isErr(cur)) return cur;
     const out = fn(cur.value);
     cur = isResult(out) ? out : ok(out);
   }
@@ -321,7 +287,7 @@ export function flow(
  *
  * @example
  * ```typescript
- * const user = await Result.flowAsync(Result.ok(req), getToken, verifyToken, toUser);
+ * const user = await Result.flowAsync(ok(req), getToken, verifyToken, toUser);
  * // verifyToken: (token: string) => ResultAsync<Payload, AuthError>
  * ```
  */
@@ -485,7 +451,7 @@ export async function flowAsync(
 ): ResultAsync<unknown, unknown> {
   let cur = await a;
   for (const fn of fns) {
-    if (cur.isErr()) return cur;
+    if (isErr(cur)) return cur;
     const out = await fn(cur.value);
     cur = isResult(out) ? out : ok(out);
   }

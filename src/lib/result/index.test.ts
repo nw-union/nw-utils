@@ -1,31 +1,26 @@
 import { describe, expect, it } from "bun:test";
 import { match } from "ts-pattern";
-import { err, ok, Result } from "./index.js";
+import { err, flow, flowAsync, isErr, isOk, ok, Result } from "./index.js";
 
 const ok1: Result.Result<number, string> = Result.ok(1);
 const ng: Result.Result<number, string> = Result.err("ng");
 
 describe("ok / err", () => {
-  it("データとしては { type, value } / { type, error } だけを持つ", () => {
-    expect(Object.entries(Result.ok(1))).toEqual([
-      ["type", "Success"],
-      ["value", 1],
-    ]);
-    expect(Object.entries(Result.ok())).toEqual([
-      ["type", "Success"],
-      ["value", undefined],
-    ]);
-    expect(Object.entries(Result.err("e"))).toEqual([
-      ["type", "Failure"],
-      ["error", "e"],
-    ]);
+  it("plain object を返す", () => {
+    expect(Result.ok(1)).toEqual({ type: "Success", value: 1 });
+    expect(Result.ok()).toEqual({ type: "Success", value: undefined });
+    expect(Result.err("e")).toEqual({ type: "Failure", error: "e" });
   });
 });
 
 describe("Result の値", () => {
-  it("ok / err は Result.ok / Result.err と同じもの", () => {
+  it("直接 import した関数は Result.xxx と同じもの", () => {
     expect(ok).toBe(Result.ok);
     expect(err).toBe(Result.err);
+    expect(isOk).toBe(Result.isOk);
+    expect(isErr).toBe(Result.isErr);
+    expect(flow).toBe(Result.flow);
+    expect(flowAsync).toBe(Result.flowAsync);
   });
   it("frozen なので書き換えられない", () => {
     const r = ok(1);
@@ -34,7 +29,7 @@ describe("Result の値", () => {
       (r as { value: number }).value = 2;
     }).toThrow();
   });
-  it("JSON にはデータだけが出る", () => {
+  it("JSON に変換できる", () => {
     expect(JSON.stringify(ok(1))).toBe('{"type":"Success","value":1}');
     expect(JSON.stringify(err("e"))).toBe('{"type":"Failure","error":"e"}');
   });
@@ -52,11 +47,11 @@ describe("Result の値", () => {
 describe("isOk / isErr", () => {
   it("型ガードとして絞り込める", () => {
     const r: Result.Result<number, string> = ok1;
-    if (r.isOk()) {
+    if (isOk(r)) {
       const v: number = r.value;
       expect(v).toBe(1);
     }
-    if (ng.isErr()) {
+    if (isErr(ng)) {
       const e: string = ng.error;
       expect(e).toBe("ng");
     }
@@ -64,16 +59,16 @@ describe("isOk / isErr", () => {
   it("isErr で絞り込んだ Failure は別の成功型の Result としてそのまま返せる", () => {
     const f = (
       r: Result.Result<number, string>,
-    ): Result.Result<boolean, string> => (r.isErr() ? r : ok(r.value > 0));
+    ): Result.Result<boolean, string> => (isErr(r) ? r : ok(r.value > 0));
     expect(Object.is(f(ng), ng)).toBe(true);
     expect(f(ok1)).toEqual(ok(true));
   });
 
   it("判定できる", () => {
-    expect(ok1.isOk()).toBe(true);
-    expect(ok1.isErr()).toBe(false);
-    expect(ng.isOk()).toBe(false);
-    expect(ng.isErr()).toBe(true);
+    expect(isOk(ok1)).toBe(true);
+    expect(isErr(ok1)).toBe(false);
+    expect(isOk(ng)).toBe(false);
+    expect(isErr(ng)).toBe(true);
   });
 });
 
@@ -144,22 +139,6 @@ describe("try / tryAsync", () => {
   });
 });
 
-describe("unwrap / unwrapError", () => {
-  it("値を取り出す", () => {
-    expect(ok1.unwrap()).toBe(1);
-    expect(ng.unwrapError()).toBe("ng");
-  });
-  it("型は呼び出した Result から決まる", () => {
-    const v: number = ok1.unwrap();
-    const e: string = ng.unwrapError();
-    expect([v, e]).toEqual([1, "ng"]);
-  });
-  it("逆側は throw する", () => {
-    expect(() => Result.err(new Error("x")).unwrap()).toThrow("x");
-    expect(() => ok1.unwrapError()).toThrow();
-  });
-});
-
 // ----------------------------------------------------------------------------
 // flow / flowAsync
 // ----------------------------------------------------------------------------
@@ -215,7 +194,7 @@ describe("flow", () => {
         return saveUser(u);
       },
     );
-    expect(r.unwrapError().message).toBe("no token");
+    expect(isErr(r) && r.error.message).toBe("no token");
     expect(calls).toEqual([]);
   });
 
@@ -229,15 +208,10 @@ describe("flow", () => {
     expect(called).toBe(false);
   });
 
-  it("ok / err で作っていない object は Result として扱わない", () => {
-    const r = Result.flow(ok(1), () => ({
-      type: "Failure" as const,
-      error: "data",
-    }));
-    assertType<
-      Equal<typeof r, Result.Result<{ type: "Failure"; error: string }, never>>
-    >();
-    expect(r.isOk()).toBe(true);
+  it("Result と同じ形の object は Result として扱う (型も同じ扱い)", () => {
+    const r = flow(ok(1), () => ({ type: "Failure" as const, error: "data" }));
+    assertType<Equal<typeof r, Result.Result<never, string>>>();
+    expect(r).toEqual(err("data"));
   });
 
   it("10 個までつなげられる", () => {
@@ -300,14 +274,14 @@ describe("flowAsync", () => {
         return tokenToUser(mail);
       },
     );
-    expect(r.unwrapError().message).toBe("invalid");
+    expect(isErr(r) && r.error.message).toBe("invalid");
     expect(called).toBe(false);
   });
 
   it("同期的に Failure で終わっても必ず Promise を返す", async () => {
     const p = Result.flowAsync(Result.ok({}), getToken, verify);
     expect(p).toBeInstanceOf(Promise);
-    expect((await p).isErr()).toBe(true);
+    expect(isErr(await p)).toBe(true);
   });
 
   it("関数が throw / reject した場合は Failure にせず reject する", async () => {
