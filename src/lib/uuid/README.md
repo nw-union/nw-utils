@@ -55,16 +55,6 @@ const original = fromShortUuid(short.value); // 元の UUID に戻る
 | `fromShortUuid` | Base64 としてデコードできない |
 | `fromShortUuid` | デコード結果が 16 バイトでない |
 
-## 他の関数とつなげる
-
-戻り値は `lib/rslt` の `Result` なので、そのまま `rslt.pipe` や `flow` につなげられます。
-
-```typescript
-import { flow, ok } from "@nw-union/nw-utils/lib/rslt";
-
-const r = flow(ok(uuidv4()), toShortUuid); // Result<string, Error>
-```
-
 ## テストでの書き方
 
 ```typescript
