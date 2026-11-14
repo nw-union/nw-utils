@@ -99,7 +99,7 @@ export const tryAsync = async <T, E>(
  *
  * @example
  * ```typescript
- * const r = pipe(
+ * const r = rslt.pipe(
  *   newEmail(input),                       // Result<Email, ValidationError>
  *   rslt.map((email) => email.toLowerCase()),
  *   rslt.andThen(findUserByEmail),         // (email) => Result<User, NotFoundError>
@@ -199,7 +199,7 @@ export function pipe(a: unknown, ...fns: ((v: unknown) => unknown)[]): unknown {
  *
  * @example
  * ```typescript
- * pipe(ok(1), rslt.map((n) => n + 1)); // ok(2)
+ * rslt.pipe(ok(1), rslt.map((n) => n + 1)); // ok(2)
  * rslt.map((n: number) => n + 1)(ok(1)); // 直接呼ぶ場合
  * ```
  */
@@ -664,7 +664,7 @@ const runIgnoringErrors = (fn: () => unknown): void => {
  *
  * @example
  * ```typescript
- * pipe(newEmail(input), rslt.andThrough(checkNotBlocked));
+ * rslt.pipe(newEmail(input), rslt.andThrough(checkNotBlocked));
  * // checkNotBlocked: (email) => Result<void, BlockedError>
  * // => Result<Email, ValidationError | BlockedError>
  * ```
@@ -687,7 +687,7 @@ export const andThrough =
  *
  * @example
  * ```typescript
- * pipe(findUser(id), rslt.andTee((user) => logger.info(`found: ${user.id}`)));
+ * rslt.pipe(findUser(id), rslt.andTee((user) => logger.info(`found: ${user.id}`)));
  * ```
  */
 export const andTee =
@@ -708,7 +708,7 @@ export const andTee =
  *
  * @example
  * ```typescript
- * pipe(saveUser(user), rslt.orThrough(recordFailure));
+ * rslt.pipe(saveUser(user), rslt.orThrough(recordFailure));
  * // recordFailure: (e: DbError) => Result<void, AuditError>
  * // => Result<User, DbError | AuditError>
  * ```
@@ -729,7 +729,7 @@ export const orThrough =
  *
  * @example
  * ```typescript
- * pipe(saveUser(user), rslt.orTee((e) => logger.error("save failed", e)));
+ * rslt.pipe(saveUser(user), rslt.orTee((e) => logger.error("save failed", e)));
  * ```
  */
 export const orTee =

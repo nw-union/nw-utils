@@ -1,4 +1,4 @@
-import { err, ok, pipe, type Result, rslt } from "../rslt/index.js";
+import { err, ok, type Result, rslt } from "../rslt/index.js";
 
 /**
  * Web Crypto API を使用した UUID v4 生成
@@ -36,13 +36,13 @@ export const uuidv4 = (): string => {
  * - 入力はUUID v4 前提だが、16バイトのUUIDであれば一般に動作
  */
 export const toShortUuid = (uuid: string): Result<string, Error> =>
-  pipe(uuidToBytes(uuid), rslt.map(base64UrlEncode));
+  rslt.pipe(uuidToBytes(uuid), rslt.map(base64UrlEncode));
 
 /**
  * Base64URLで短縮されたUUID文字列(22文字)を通常のUUID表記に復元する
  */
 export const fromShortUuid = (short: string): Result<string, Error> =>
-  pipe(base64UrlDecode(short), rslt.andThen(bytesToUuid));
+  rslt.pipe(base64UrlDecode(short), rslt.andThen(bytesToUuid));
 
 // ----------------------------------------------------------------------------
 // Internal Utils
