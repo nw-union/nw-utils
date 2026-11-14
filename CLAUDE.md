@@ -78,8 +78,9 @@ AppError (基底クラス)
 - 判定: `isSuccess`, `isFailure` (型ガード)
 - 変換: `map`, `mapError`, `andThen`, `orElse` (すべて同期・data-first)
 - 取り出し: `unwrap`, `unwrapError` (失敗時は throw。主にテスト用)
+- 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
 
-非同期の合成は combinator ではなく async/await で書く:
+非同期の合成は `flowAsync`、または async/await で書く:
 
 ```typescript
 const f = async (id: string): Result.ResultAsync<User, AppError> => {
