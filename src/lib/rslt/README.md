@@ -1,6 +1,11 @@
-# @nw-union/nw-utils/lib/rslt
+<samp>
+<h1 align="center">@nw-union/nw-utils/lib/rslt</h1>
 
-外部依存のない、最小限の Result 型ライブラリです。例外を投げる代わりに「成功」か「失敗」かを値として返し、エラーを型で扱えるようにします。
+<p align="center">
+外部依存のない、最小限の Result 型ライブラリ。<br/> 例外を投げる代わりに「成功」か「失敗」かを値として返し、エラーを型で扱えるようにします。
+</p>
+
+<br />
 
 ```typescript
 import { err, isErr, ok, rslt, type Result } from "@nw-union/nw-utils/lib/rslt";
@@ -14,13 +19,6 @@ const r = parseAge(input);
 if (isErr(r)) return r;   // r.error: ValidationError
 console.log(r.value);     // r.value: number
 ```
-
-## import のしかた
-
-- **名前で import するもの**: `ok` / `err` / `isOk` / `isErr` / `flow` / `flowAsync` / `through` / `throughAsync` / `sequence` / `collect` / `sequenceAsync` / `collectAsync`、型の `Result` / `ResultAsync`
-- **`rslt.xxx` で使うもの**: 上記以外 (`rslt.pipe` / `rslt.map` / `rslt.try` など)。`map` のような一般的な名前は利用側とぶつかりやすく、`try` は予約語で単独の名前にできないため
-
-どちらの書き方でも、使った関数だけがバンドルに入ります (tree-shaking)。
 
 ## 型
 
@@ -52,7 +50,7 @@ const res = await rslt.tryAsync(() => fetch(url), (e) => new SystemError(String(
 
 ## 分岐する
 
-`isOk(r)` / `isErr(r)` は型ガードです。絞り込むと `r.value` / `r.error` を使えます。
+`isErr(r)` は型ガードです。絞り込むと `r.value` / `r.error` を使えます。
 
 `isErr` で絞り込んだ Failure は、成功値の型が違う関数からもそのまま返せます。
 
@@ -67,18 +65,48 @@ const toUser = (r: Result<string, AuthError>): Result<User, AuthError> => {
 
 つなげ方は 2 通りあります。
 
-| | `rslt.pipe` | `flow` / `flowAsync` |
+| | `flow` / `flowAsync` | `rslt.pipe` |
 | --- | --- | --- |
-| 並べる関数 | `rslt.map(f)` など、**Result を受け取る**関数 | **成功値を受け取る**普通の関数 |
-| `map` / `andThen` の区別 | 明示する | 戻り値が Result かどうかで自動 |
-| 失敗側の処理 (`mapErr` など) | 途中に書ける | 書けない |
-| 非同期 | なし | `flowAsync` |
+| 並べる関数 | **成功値を受け取る**普通の関数 | `rslt.map(f)` など、**Result を受け取る**関数 |
+| `map` / `andThen` の区別 | 戻り値が Result かどうかで自動 | 明示する |
+| 失敗側の処理 (`mapErr` など) | 書けない | 途中に書ける |
+| 非同期 | `flowAsync` | なし |
 
 ```typescript
 // 同じ処理を 2 通りで書く
-rslt.pipe(ok(req), rslt.andThen(getToken), rslt.map(tokenToUser));
 flow(ok(req), getToken, tokenToUser);
+rslt.pipe(ok(req), rslt.andThen(getToken), rslt.map(tokenToUser));
 ```
+
+### flow / flowAsync
+
+普通の関数をそのまま並べます。各関数には直前の**成功値**が渡ります。
+
+- 関数が Result を返したら、その Result を使う (`andThen` 相当)
+- Result 以外の値を返したら、`ok` で包む (`map` 相当)
+- 途中で Failure になったら、残りの関数は呼ばずにその Failure を返す
+
+値を変えない処理 (検証やログ) は `through` で包みます。包んだ関数の戻り値は捨てられ、直前の成功値がそのまま次に渡ります (Failure を返したらそこで止まる)。
+
+```typescript
+// getToken:        (req: Request) => Result<string, AuthError>
+// checkNotRevoked: (token: string) => Result<void, AuthError>
+// tokenToUser:     (token: string) => User
+
+const user = flow(
+  ok(req),
+  getToken,
+  through(checkNotRevoked),
+  tokenToUser,
+);
+// user: Result<User, AuthError>
+
+// 非同期の関数を含むなら flowAsync / throughAsync。必ず Promise を返す
+const user2 = await flowAsync(ok(req), getToken, verifyToken, throughAsync(saveLog), toUser);
+```
+
+- `flow` / `through` に Promise を返す関数を渡すと型エラーになります
+- 「`void` を返したら自動で素通り」にしないのは、実行時に `void` と `undefined` を区別できず、`User | undefined` を返す関数の結果を取り違えるためです
 
 ### rslt.pipe
 
@@ -111,30 +139,6 @@ const r = rslt.pipe(
 - **Through と Tee**: 失敗したら止めたい処理 (検証など) は Through、失敗しても本筋に影響させたくない副作用 (ログなど) は Tee を使います。Tee は `f` の例外も Promise の reject も握りつぶします (完了は待ちません)
 - `rslt.pipe` は Result 専用ではなく、引数を 1 つ受け取る関数なら何でも並べられます
 - `rslt.map(f)` を `rslt.pipe` の外で作るときは、引数の型を書きます: `const double = rslt.map((n: number) => n * 2)`
-
-### flow / flowAsync
-
-普通の関数をそのまま並べます。各関数には直前の**成功値**が渡ります。
-
-- 関数が Result を返したら、その Result を使う (`andThen` 相当)
-- Result 以外の値を返したら、`ok` で包む (`map` 相当)
-- 途中で Failure になったら、残りの関数は呼ばずにその Failure を返す
-
-値を変えない処理 (検証やログ) は `through` で包みます。包んだ関数の戻り値は捨てられ、直前の成功値がそのまま次に渡ります (Failure を返したらそこで止まる)。
-
-```typescript
-// getToken:        (req: Request) => Result<string, AuthError>
-// checkNotRevoked: (token: string) => Result<void, AuthError>
-// tokenToUser:     (token: string) => User
-const user = flow(ok(req), getToken, through(checkNotRevoked), tokenToUser);
-// user: Result<User, AuthError>
-
-// 非同期の関数を含むなら flowAsync / throughAsync。必ず Promise を返す
-const user2 = await flowAsync(ok(req), getToken, verifyToken, throughAsync(saveLog), toUser);
-```
-
-- `flow` / `through` に Promise を返す関数を渡すと型エラーになります
-- 「`void` を返したら自動で素通り」にしないのは、実行時に `void` と `undefined` を区別できず、`User | undefined` を返す関数の結果を取り違えるためです
 
 ## まとめる
 
@@ -197,20 +201,4 @@ expect(isErr(r)).toBe(true);
 if (isErr(r)) expect(r.error.code).toBe("Validation Error");
 ```
 
-## neverthrow との対応
-
-| neverthrow | lib/rslt |
-| --- | --- |
-| `ok(v)` / `err(e)` | `ok(v)` / `err(e)` |
-| `r.isOk()` / `r.isErr()` | `isOk(r)` / `isErr(r)` |
-| `r.map(f)` / `r.andThen(f)` | `rslt.pipe(r, rslt.map(f))` / `rslt.pipe(r, rslt.andThen(f))` |
-| `r.mapErr(f)` / `r.orElse(f)` | `rslt.pipe(r, rslt.mapErr(f))` / `rslt.pipe(r, rslt.orElse(f))` |
-| `r.andThrough(f)` / `r.andTee(f)` | `rslt.pipe(r, rslt.andThrough(f))` / `rslt.pipe(r, rslt.andTee(f))` |
-| `r.orTee(f)` | `rslt.pipe(r, rslt.orTee(f))` |
-| `ok(v).andThen(f).map(g)` | `flow(ok(v), f, g)` |
-| `okAsync(v).andThen(f).map(g)` | `flowAsync(ok(v), f, g)` |
-| `Result.fromThrowable(fn, onErr)()` | `rslt.try(fn, onError)` |
-| `ResultAsync.fromPromise(p, onErr)` | `rslt.tryAsync(() => p, onError)` |
-| `Result.combine` / `combineWithAllErrors` | `sequence` / `collect` |
-| `ResultAsync.combine` / `combineWithAllErrors` | `sequenceAsync` / `collectAsync` |
-| `r._unsafeUnwrap()` | なし (`toEqual(ok(v))` か `isOk` で絞り込む) |
+</samp>
