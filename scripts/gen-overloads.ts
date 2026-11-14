@@ -1,18 +1,20 @@
 /**
- * src/lib/rslt/result.ts の flow / flowAsync / pipe と、
- * src/lib/vo/schema.ts の pipe のオーバーロードを生成する
+ * オーバーロードを生成する
+ *
+ * - src/lib/rslt/result.ts: step / stepAsync / pipe
+ * - src/lib/vo/schema.ts: chain
  *
  * - `bun run gen`        : 生成してファイルを書き換える
  * - `bun run gen --check`: 生成結果とファイルが一致するか確認する (不一致なら exit 1)
  *
- * 生成範囲は `// <generated:flow>` 〜 `// </generated:flow>` (flowAsync / pipe も同様)
+ * 生成範囲は `// <generated:step>` 〜 `// </generated:step>` (他も同様)
  */
 const RSLT_FILE = "src/lib/rslt/result.ts";
 const VO_FILE = "src/lib/vo/schema.ts";
 const MAX = 10; // つなげられる関数の最大数
 
-const overloads = (name: "flow" | "flowAsync"): string => {
-  const isAsync = name === "flowAsync";
+const overloads = (name: "step" | "stepAsync"): string => {
+  const isAsync = name === "stepAsync";
   const lines: string[] = [];
   for (let n = 1; n <= MAX; n++) {
     const bs = Array.from({ length: n }, (_, i) => `B${i + 1}`);
@@ -51,14 +53,16 @@ const pipeOverloads = (): string => {
   return lines.join("\n");
 };
 
-// vo の pipe: Step を左から順につなげる (Step 1〜MAX 個)
-const stepPipeOverloads = (): string => {
+// vo の chain: Parser を左から順につなげる (Parser 1〜MAX 個)
+const chainOverloads = (): string => {
   const lines: string[] = [];
   for (let n = 1; n <= MAX; n++) {
     const ts = ["A", ...Array.from({ length: n }, (_, i) => `B${i + 1}`)];
-    const params = ts.slice(1).map((t, i) => `s${i + 1}: Step<${ts[i]}, ${t}>`);
+    const params = ts
+      .slice(1)
+      .map((t, i) => `p${i + 1}: Parser<${ts[i]}, ${t}>`);
     lines.push(
-      `export function pipe<${ts.join(", ")}>(${params.join(", ")}): Step<A, ${ts[n]}>;`,
+      `export function chain<${ts.join(", ")}>(${params.join(", ")}): Parser<A, ${ts[n]}>;`,
     );
   }
   return lines.join("\n");
@@ -102,7 +106,7 @@ const targets: { file: string; build: (src: string) => string }[] = [
     file: RSLT_FILE,
     build: (src) => {
       let next = src;
-      for (const name of ["flow", "flowAsync"] as const) {
+      for (const name of ["step", "stepAsync"] as const) {
         next = replaceBlock(RSLT_FILE, next, name, overloads(name));
       }
       return replaceBlock(RSLT_FILE, next, "pipe", pipeOverloads());
@@ -110,7 +114,7 @@ const targets: { file: string; build: (src: string) => string }[] = [
   },
   {
     file: VO_FILE,
-    build: (src) => replaceBlock(VO_FILE, src, "pipe", stepPipeOverloads()),
+    build: (src) => replaceBlock(VO_FILE, src, "chain", chainOverloads()),
   },
 ];
 

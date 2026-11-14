@@ -9,7 +9,7 @@
     "prepublishOnly": "bun run build",
     "test": "bun test",
     "check": "biome check --write src",
-    "gen": "bun scripts/gen-flow-overloads.ts"
+    "gen": "bun scripts/gen-overloads.ts"
   },
   "type": "module",
   "files": ["dist"],

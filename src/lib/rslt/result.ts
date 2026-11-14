@@ -14,7 +14,7 @@ export type Result<T, E> = Success<T> | Failure<E>;
 /** 非同期の Result */
 export type ResultAsync<T, E> = Promise<Result<T, E>>;
 
-// Promise を返す関数を同期の try / flow に渡せないようにするための型
+// Promise を返す関数を同期の try / step に渡せないようにするための型
 // - union の一部でも Promise なら拒否する (`number | Promise<number>` も不可)
 // - any は判定できないので許可する (JSON.parse などを渡せるように)
 type NotPromise<T> = 0 extends 1 & T
@@ -84,7 +84,7 @@ export const tryAsync = async <T, E>(
 // ----------------------------------------------------------------------------
 // pipe / 変換 (data-last)
 //   rslt.map(fn) は「Result を受け取って変換する関数」を返す。pipe の中に並べて使う
-//   すべて同期。非同期処理の合成は flowAsync か、async/await と isErr による早期 return で書く
+//   すべて同期。非同期処理の合成は stepAsync か、async/await と isErr による早期 return で書く
 // ----------------------------------------------------------------------------
 
 /**
@@ -103,7 +103,7 @@ export const tryAsync = async <T, E>(
  * );
  * ```
  */
-// <generated:pipe> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
+// <generated:pipe> scripts/gen-overloads.ts で生成 (bun run gen)。直接編集しないこと
 export function pipe<A>(a: A): A;
 export function pipe<A, B1>(a: A, f1: (v: A) => B1): B1;
 export function pipe<A, B1, B2>(a: A, f1: (v: A) => B1, f2: (v: B1) => B2): B2;
@@ -223,7 +223,7 @@ export const orElse =
     isErr(r) ? fn(r.error) : r;
 
 // ----------------------------------------------------------------------------
-// flow (関数の連結)
+// step (関数の連結)
 // ----------------------------------------------------------------------------
 
 // 関数の戻り値 X から、次の関数に渡る値の型を求める (Result なら中身、それ以外はそのまま)
@@ -250,40 +250,40 @@ const isResult = (x: unknown): x is Result<unknown, unknown> => {
  * - 各関数には直前の成功値が渡される
  * - 関数が Result を返せばそれを使い (andThen 相当)、それ以外の値なら ok で包む (map 相当)
  * - 途中で Failure になったら、残りの関数は呼ばずにその Failure を返す
- * - Promise を返す関数は渡せない (型エラー)。非同期には `flowAsync` を使う
+ * - Promise を返す関数は渡せない (型エラー)。非同期には `stepAsync` を使う
  *
  * @example
  * ```typescript
- * const user = flow(ok(req), getToken, tokenToUser);
+ * const user = step(ok(req), getToken, tokenToUser);
  * // getToken: (req: Request) => Result<string, AuthError>
  * // tokenToUser: (token: string) => User
  * // user: Result<User, AuthError>
  * ```
  */
-// <generated:flow> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
-export function flow<A, E, B1>(
+// <generated:step> scripts/gen-overloads.ts で生成 (bun run gen)。直接編集しないこと
+export function step<A, E, B1>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
 ): Result<Val<B1>, E | Err<B1>>;
-export function flow<A, E, B1, B2>(
+export function step<A, E, B1, B2>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
 ): Result<Val<B2>, E | Err<B1> | Err<B2>>;
-export function flow<A, E, B1, B2, B3>(
+export function step<A, E, B1, B2, B3>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
   f3: (v: Val<B2>) => B3 & NotPromise<B3>,
 ): Result<Val<B3>, E | Err<B1> | Err<B2> | Err<B3>>;
-export function flow<A, E, B1, B2, B3, B4>(
+export function step<A, E, B1, B2, B3, B4>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
   f3: (v: Val<B2>) => B3 & NotPromise<B3>,
   f4: (v: Val<B3>) => B4 & NotPromise<B4>,
 ): Result<Val<B4>, E | Err<B1> | Err<B2> | Err<B3> | Err<B4>>;
-export function flow<A, E, B1, B2, B3, B4, B5>(
+export function step<A, E, B1, B2, B3, B4, B5>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
@@ -291,7 +291,7 @@ export function flow<A, E, B1, B2, B3, B4, B5>(
   f4: (v: Val<B3>) => B4 & NotPromise<B4>,
   f5: (v: Val<B4>) => B5 & NotPromise<B5>,
 ): Result<Val<B5>, E | Err<B1> | Err<B2> | Err<B3> | Err<B4> | Err<B5>>;
-export function flow<A, E, B1, B2, B3, B4, B5, B6>(
+export function step<A, E, B1, B2, B3, B4, B5, B6>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
@@ -303,7 +303,7 @@ export function flow<A, E, B1, B2, B3, B4, B5, B6>(
   Val<B6>,
   E | Err<B1> | Err<B2> | Err<B3> | Err<B4> | Err<B5> | Err<B6>
 >;
-export function flow<A, E, B1, B2, B3, B4, B5, B6, B7>(
+export function step<A, E, B1, B2, B3, B4, B5, B6, B7>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
@@ -316,7 +316,7 @@ export function flow<A, E, B1, B2, B3, B4, B5, B6, B7>(
   Val<B7>,
   E | Err<B1> | Err<B2> | Err<B3> | Err<B4> | Err<B5> | Err<B6> | Err<B7>
 >;
-export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8>(
+export function step<A, E, B1, B2, B3, B4, B5, B6, B7, B8>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
@@ -338,7 +338,7 @@ export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8>(
   | Err<B7>
   | Err<B8>
 >;
-export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
+export function step<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
@@ -362,7 +362,7 @@ export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
   | Err<B8>
   | Err<B9>
 >;
-export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
+export function step<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
   a: Result<A, E>,
   f1: (v: A) => B1 & NotPromise<B1>,
   f2: (v: Val<B1>) => B2 & NotPromise<B2>,
@@ -388,8 +388,8 @@ export function flow<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
   | Err<B9>
   | Err<B10>
 >;
-// </generated:flow>
-export function flow(
+// </generated:step>
+export function step(
   a: Result<unknown, unknown>,
   ...fns: ((v: unknown) => unknown)[]
 ): Result<unknown, unknown> {
@@ -405,26 +405,26 @@ export function flow(
 /**
  * Result に (非同期を含む) 関数を順に適用する
  *
- * `flow` と同じ動きで、各関数は Promise を返してもよい。
+ * `step` と同じ動きで、各関数は Promise を返してもよい。
  * どこで終わっても (途中で Failure になっても) 必ず Promise を返す
  *
  * @example
  * ```typescript
- * const user = await flowAsync(ok(req), getToken, verifyToken, toUser);
+ * const user = await stepAsync(ok(req), getToken, verifyToken, toUser);
  * // verifyToken: (token: string) => ResultAsync<Payload, AuthError>
  * ```
  */
-// <generated:flowAsync> scripts/gen-flow-overloads.ts で生成 (bun run gen)。直接編集しないこと
-export function flowAsync<A, E, B1>(
+// <generated:stepAsync> scripts/gen-overloads.ts で生成 (bun run gen)。直接編集しないこと
+export function stepAsync<A, E, B1>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
 ): ResultAsync<Val<Awaited<B1>>, E | Err<Awaited<B1>>>;
-export function flowAsync<A, E, B1, B2>(
+export function stepAsync<A, E, B1, B2>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
 ): ResultAsync<Val<Awaited<B2>>, E | Err<Awaited<B1>> | Err<Awaited<B2>>>;
-export function flowAsync<A, E, B1, B2, B3>(
+export function stepAsync<A, E, B1, B2, B3>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -433,7 +433,7 @@ export function flowAsync<A, E, B1, B2, B3>(
   Val<Awaited<B3>>,
   E | Err<Awaited<B1>> | Err<Awaited<B2>> | Err<Awaited<B3>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4>(
+export function stepAsync<A, E, B1, B2, B3, B4>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -443,7 +443,7 @@ export function flowAsync<A, E, B1, B2, B3, B4>(
   Val<Awaited<B4>>,
   E | Err<Awaited<B1>> | Err<Awaited<B2>> | Err<Awaited<B3>> | Err<Awaited<B4>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4, B5>(
+export function stepAsync<A, E, B1, B2, B3, B4, B5>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -459,7 +459,7 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5>(
   | Err<Awaited<B4>>
   | Err<Awaited<B5>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4, B5, B6>(
+export function stepAsync<A, E, B1, B2, B3, B4, B5, B6>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -477,7 +477,7 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5, B6>(
   | Err<Awaited<B5>>
   | Err<Awaited<B6>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7>(
+export function stepAsync<A, E, B1, B2, B3, B4, B5, B6, B7>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -497,7 +497,7 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7>(
   | Err<Awaited<B6>>
   | Err<Awaited<B7>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8>(
+export function stepAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -519,7 +519,7 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8>(
   | Err<Awaited<B7>>
   | Err<Awaited<B8>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
+export function stepAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -543,7 +543,7 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9>(
   | Err<Awaited<B8>>
   | Err<Awaited<B9>>
 >;
-export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
+export function stepAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
   a: Result<A, E> | ResultAsync<A, E>,
   f1: (v: A) => B1,
   f2: (v: Val<Awaited<B1>>) => B2,
@@ -569,8 +569,8 @@ export function flowAsync<A, E, B1, B2, B3, B4, B5, B6, B7, B8, B9, B10>(
   | Err<Awaited<B9>>
   | Err<Awaited<B10>>
 >;
-// </generated:flowAsync>
-export async function flowAsync(
+// </generated:stepAsync>
+export async function stepAsync(
   a: Result<unknown, unknown> | ResultAsync<unknown, unknown>,
   ...fns: ((v: unknown) => unknown)[]
 ): ResultAsync<unknown, unknown> {
@@ -588,17 +588,17 @@ export async function flowAsync(
 // ----------------------------------------------------------------------------
 
 /**
- * 成功値を使って処理を実行し、その戻り値は捨てて **元の成功値をそのまま返す** 関数を作る (flow 用)
+ * 成功値を使って処理を実行し、その戻り値は捨てて **元の成功値をそのまま返す** 関数を作る (step 用)
  *
  * - fn が Failure を返したら、その Failure を返す (後続の処理は止まる)
  * - fn が void / 成功の Result / それ以外の値を返したら、元の成功値をそのまま返す
  * - Promise を返す関数は渡せない (型エラー)。非同期には `throughAsync` を使う
  *
- * ログ出力や、値を変えない検証 (権限チェックなど) を flow の途中に挟むのに使う
+ * ログ出力や、値を変えない検証 (権限チェックなど) を step の途中に挟むのに使う
  *
  * @example
  * ```typescript
- * flow(
+ * step(
  *   ok(req),
  *   getToken,                  // Result<string, AuthError>
  *   through(checkNotRevoked),  // (token: string) => Result<void, AuthError>
@@ -615,11 +615,11 @@ export const through =
   };
 
 /**
- * `through` の非同期版 (flowAsync 用)。fn は Promise を返してもよく、必ず Promise を返す
+ * `through` の非同期版 (stepAsync 用)。fn は Promise を返してもよく、必ず Promise を返す
  *
  * @example
  * ```typescript
- * await flowAsync(ok(req), getToken, throughAsync(saveAccessLog), tokenToUser);
+ * await stepAsync(ok(req), getToken, throughAsync(saveAccessLog), tokenToUser);
  * // saveAccessLog: (token: string) => ResultAsync<void, DbError>
  * ```
  */
@@ -650,19 +650,19 @@ const runIgnoringErrors = (fn: () => unknown): void => {
 };
 
 /**
- * 成功値を使って副作用 (ログ出力など) を実行し、**元の成功値をそのまま返す** 関数を作る (flow 用)
+ * 成功値を使って副作用 (ログ出力など) を実行し、**元の成功値をそのまま返す** 関数を作る (step 用)
  *
- * `through` のエラーを無視する版。`rslt.andTee` の flow 版
+ * `through` のエラーを無視する版。`rslt.andTee` の step 版
  *
  * - fn の戻り値は捨てる。Failure を返しても無視する (後続の処理は止まらない)
  * - fn の例外も Promise の reject も握りつぶす (非同期の完了は待たない)
  *
- * 失敗しても本筋に影響させたくない処理 (ログ、アクセス記録など) を flow の途中に挟むのに使う。
+ * 失敗しても本筋に影響させたくない処理 (ログ、アクセス記録など) を step の途中に挟むのに使う。
  * 失敗したら止めたい処理には `through` を使う
  *
  * @example
  * ```typescript
- * flow(
+ * step(
  *   ok(req),
  *   getToken,
  *   tee((token) => logger.info(`token: ${token}`)),  // 失敗しても無視
@@ -684,7 +684,7 @@ export const tee =
  * - fn が Failure を返したら、その Failure を返す
  * - fn の例外はそのまま投げる
  *
- * 値を変えない検証 (権限チェックなど) に使う。flow の中では `through` を使う
+ * 値を変えない検証 (権限チェックなど) に使う。step の中では `through` を使う
  *
  * @example
  * ```typescript
