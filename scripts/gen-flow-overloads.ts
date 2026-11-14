@@ -89,7 +89,11 @@ const format = (file: string, src: string): string => {
     },
   );
   if (p.exitCode !== 0) throw new Error(p.stderr.toString());
-  return p.stdout.toString();
+  const out = p.stdout.toString();
+  // node_modules が無いと bunx が別の "biome" パッケージを拾い、空の出力を返すことがある
+  if (out.trim() === "")
+    throw new Error("biome の出力が空。bun install を実行したか確認すること");
+  return out;
 };
 
 // 各ファイルの生成結果を求める
