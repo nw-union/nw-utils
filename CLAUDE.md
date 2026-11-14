@@ -24,6 +24,9 @@ src/
 ├── error.ts                  # カスタムエラークラス定義
 ├── interface.ts              # 共通インターフェース定義
 ├── lib/
+│   ├── result/               # Result 型ライブラリ
+│   │   ├── index.ts
+│   │   └── result.ts
 │   ├── uuid/                 # UUID 生成・変換ユーティリティ
 │   │   └── index.ts
 │   └── zod/                  # Zod バリデーションヘルパー
@@ -65,6 +68,27 @@ AppError (基底クラス)
 - 戻り値: `ResultAsync<string, AuthError>`
 
 ### ライブラリ機能
+
+#### Result ライブラリ (lib/result/)
+
+外部依存のない最小限の Result 型。名前は neverthrow に寄せ、すべて独立した関数にして tree-shaking を効かせている。`import { err, flow, flowAsync, isErr, isOk, ok, Result } from "@nw-union/nw-utils/lib/result"` で使う (それ以外の関数は `Result.map` のように使う)。
+
+- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object (frozen)), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
+- 生成: `ok`, `err`, `Result.try` (同期), `Result.tryAsync` (非同期)
+- 判定: `isOk(r)`, `isErr(r)` (型ガード)
+- 変換: `Result.map`, `Result.mapError`, `Result.andThen`, `Result.orElse` (すべて同期・data-first)
+- 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
+- 集約: `Result.sequence` (最初の Failure), `Result.collect` (全エラー), `Result.sequenceAsync`, `Result.collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
+
+非同期の合成は `flowAsync`、または async/await で書く:
+
+```typescript
+const f = async (id: string): Result.ResultAsync<User, AppError> => {
+  const valid = validateId(id);
+  if (isErr(valid)) return valid;
+  return Result.tryAsync(() => fetchUser(valid.value), toAppError);
+};
+```
 
 #### UUID ライブラリ (lib/uuid/)
 
@@ -130,6 +154,7 @@ const result = await auth.auth(request); // ResultAsync<string, AuthError>
 以下のサブパス export が利用可能です:
 
 - `@nw-union/nw-utils` - メインエクスポート（error, interface）
+- `@nw-union/nw-utils/lib/result` - Result 型
 - `@nw-union/nw-utils/lib/uuid` - UUID ユーティリティ
 - `@nw-union/nw-utils/lib/zod` - Zod ヘルパー
 - `@nw-union/nw-utils/adapter/auth-mock` - モック認証
@@ -140,6 +165,7 @@ const result = await auth.auth(request); // ResultAsync<string, AuthError>
 ```bash
 bun run build        # TypeScript のビルド
 bun run check        # Biome による lint と format
+bun run gen          # lib/result の flow / flowAsync のオーバーロードを再生成 (--check で差分確認)
 ```
 
 ## 設計原則

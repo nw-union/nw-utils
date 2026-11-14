@@ -7,7 +7,8 @@
   "scripts": {
     "build": "bunx tsc -p tsconfig.json",
     "prepublishOnly": "bun run build",
-    "check": "biome check --write src"
+    "check": "biome check --write src",
+    "gen": "bun scripts/gen-flow-overloads.ts"
   },
   "type": "module",
   "files": ["dist"],
@@ -19,6 +20,10 @@
     "./lib/uuid": {
       "types": "./dist/lib/uuid/index.d.ts",
       "default": "./dist/lib/uuid/index.js"
+    },
+    "./lib/result": {
+      "types": "./dist/lib/result/index.d.ts",
+      "default": "./dist/lib/result/index.js"
     },
     "./lib/zod": {
       "types": "./dist/lib/zod/index.d.ts",
