@@ -78,6 +78,7 @@ AppError (基底クラス)
 - 判定: `isOk(r)`, `isErr(r)` (型ガード)
 - 変換: `Result.map`, `Result.mapError`, `Result.andThen`, `Result.orElse` (すべて同期・data-first)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
+- 集約: `Result.sequence` (最初の Failure), `Result.collect` (全エラー), `Result.sequenceAsync`, `Result.collectAsync` (配列・オブジェクトを受け取り、同じ形で返す)
 
 非同期の合成は `flowAsync`、または async/await で書く:
 

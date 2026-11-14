@@ -291,3 +291,123 @@ describe("flowAsync", () => {
     await expect(p).rejects.toThrow("boom");
   });
 });
+
+// ----------------------------------------------------------------------------
+// sequence / collect
+// ----------------------------------------------------------------------------
+
+describe("sequence", () => {
+  const a: Result.Result<number, string> = ok(1);
+  const b: Result.Result<string, Error> = ok("x");
+
+  it("タプルの形と型を保って成功値をまとめる", () => {
+    const r = Result.sequence([a, b]);
+    assertType<
+      Equal<typeof r, Result.Result<[number, string], string | Error>>
+    >();
+    expect(r).toEqual(ok([1, "x"]));
+  });
+
+  it("オブジェクトのキーを保って成功値をまとめる", () => {
+    const r = Result.sequence({ id: a, name: b });
+    assertType<
+      Equal<
+        typeof r,
+        Result.Result<{ id: number; name: string }, string | Error>
+      >
+    >();
+    expect(r).toEqual(ok({ id: 1, name: "x" }));
+  });
+
+  it("可変長の配列もまとめられる", () => {
+    const list: Result.Result<number, string>[] = [ok(1), ok(2), ok(3)];
+    const r = Result.sequence(list);
+    assertType<Equal<typeof r, Result.Result<number[], string>>>();
+    expect(r).toEqual(ok([1, 2, 3]));
+  });
+
+  it("入力の順番で最初の Failure を返す", () => {
+    expect(Result.sequence([ok(1), err("e1"), err("e2")])).toEqual(err("e1"));
+    expect(Result.sequence({ x: err("e1"), y: err("e2") })).toEqual(err("e1"));
+  });
+
+  it("空なら空の成功", () => {
+    expect(Result.sequence([])).toEqual(ok([]));
+    expect(Result.sequence({})).toEqual(ok({}));
+  });
+});
+
+describe("collect", () => {
+  it("すべて成功なら sequence と同じ", () => {
+    const r = Result.collect({ id: ok(1), name: ok("x") });
+    assertType<
+      Equal<typeof r, Result.Result<{ id: number; name: string }, never[]>>
+    >();
+    expect(r).toEqual(ok({ id: 1, name: "x" }));
+  });
+
+  it("失敗があればすべてのエラーを入力の順番で返す", () => {
+    const a: Result.Result<number, string> = err("e1");
+    const b: Result.Result<string, Error> = ok("x");
+    const c: Result.Result<boolean, string> = err("e3");
+    const r = Result.collect([a, b, c]);
+    assertType<
+      Equal<
+        typeof r,
+        Result.Result<[number, string, boolean], (string | Error)[]>
+      >
+    >();
+    expect(r).toEqual(err(["e1", "e3"]));
+  });
+});
+
+describe("sequenceAsync / collectAsync", () => {
+  const later = <T>(ms: number, r: Result.Result<T, string>) =>
+    new Promise<Result.Result<T, string>>((res) =>
+      setTimeout(() => res(r), ms),
+    );
+
+  it("Result と ResultAsync を混ぜてまとめられる", async () => {
+    const p = Result.sequenceAsync({ user: later(5, ok("u")), n: ok(1) });
+    assertType<
+      Equal<typeof p, Result.ResultAsync<{ user: string; n: number }, string>>
+    >();
+    expect(await p).toEqual(ok({ user: "u", n: 1 }));
+  });
+
+  it("並列に待つ (合計時間は最も遅いものと同程度)", async () => {
+    const start = Date.now();
+    const r = await Result.sequenceAsync([
+      later(30, ok(1)),
+      later(30, ok(2)),
+      later(30, ok(3)),
+    ]);
+    expect(r).toEqual(ok([1, 2, 3]));
+    expect(Date.now() - start).toBeLessThan(80);
+  });
+
+  it("sequenceAsync は先に終わった失敗ではなく、入力の順番で最初の Failure を返す", async () => {
+    const r = await Result.sequenceAsync([
+      later(20, err("slow")),
+      later(1, err("fast")),
+    ]);
+    expect(r).toEqual(err("slow"));
+  });
+
+  it("collectAsync はすべてのエラーを集める", async () => {
+    const p = Result.collectAsync([
+      later(5, err("e1")),
+      ok(2),
+      later(1, err("e3")),
+    ]);
+    assertType<
+      Equal<typeof p, Result.ResultAsync<[never, number, never], string[]>>
+    >();
+    expect(await p).toEqual(err(["e1", "e3"]));
+  });
+
+  it("同期的な Result だけでも必ず Promise を返す", () => {
+    expect(Result.sequenceAsync([err("e")])).toBeInstanceOf(Promise);
+    expect(Result.collectAsync([err("e")])).toBeInstanceOf(Promise);
+  });
+});

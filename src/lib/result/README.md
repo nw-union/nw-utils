@@ -161,6 +161,43 @@ const r = await flowAsync(ok(req), getToken, verifyToken, toUser);
 > - `Result.orElse` / `Result.mapError` のような失敗側の処理は `flow` の中には書けません。`flow` の結果に対して呼んでください
 > - Result かどうかは `{ type: "Success", value }` / `{ type: "Failure", error }` という形で判定します。成功値としてこの形のオブジェクトを返すと Result として扱われます (型の推論も同じ扱いになります)
 
+### 複数の Result をまとめる (sequence / collect)
+
+| 関数 | 説明 |
+| --- | --- |
+| `Result.sequence(x)` | すべて成功なら成功値をまとめた Result。1 つでも失敗なら **最初の** Failure を返す |
+| `Result.collect(x)` | すべて成功なら成功値をまとめた Result。失敗があれば **すべての** エラーを配列で返す |
+| `Result.sequenceAsync(x)` | `sequence` の非同期版 |
+| `Result.collectAsync(x)` | `collect` の非同期版 |
+
+配列 (タプル) とオブジェクトのどちらも受け取れ、入力と同じ形で成功値を返します。型もタプルの並び・オブジェクトのキーを保ちます。
+
+```typescript
+// タプル
+Result.sequence([newId(x), newEmail(y)]);
+// Result<[Id, Email], ValidationError>
+
+// オブジェクト
+Result.sequence({ id: newId(x), mail: newEmail(y) });
+// Result<{ id: Id; mail: Email }, ValidationError>
+
+// フォームの全項目を検証し、エラーをまとめて返す
+Result.collect({ id: newId(x), mail: newEmail(y) });
+// Result<{ id: Id; mail: Email }, ValidationError[]>
+```
+
+非同期版は Result と ResultAsync を混ぜて渡せ、必ず Promise を返します。
+
+```typescript
+const r = await Result.sequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
+// Result<{ user: User; posts: Post[] }, ApiError>
+```
+
+> [!NOTE]
+> - 「最初の Failure」は **入力の順番** で決まります (先に終わった失敗ではありません)。エラーの配列も入力の順番に並びます
+> - 非同期版は `Promise.all` ですべての完了を待ってから結果を返します。途中で失敗しても待つのは、すでに走り出している他の処理を止められず、その reject を取りこぼさないためです
+> - 処理が並列に走るのは、`fetchUser(id)` などを呼んだ時点です。`sequenceAsync` / `collectAsync` は完了を待つだけです
+
 ## 非同期処理の書き方
 
 変換関数 (`Result.map`, `Result.andThen` など) は同期の Result だけを受け取ります。非同期処理は `flowAsync` でつなげるか、async 関数の中で `await` と `isErr` による早期 return でつなげます。
@@ -220,6 +257,10 @@ if (isErr(r)) expect(r.error.code).toBe("Validation Error");
 | `r.orElse(f)` | `Result.pipe(r, Result.orElse(f))` | `Result.orElse(r, f)` |
 | `Result.fromThrowable(fn, onErr)()` | `Result.try({ try, catch })` | `Result.try(fn, onError)` |
 | `ResultAsync.fromPromise(p, onErr)` | `Result.try({ try, catch })` | `Result.tryAsync(fn, onError)` |
+| `Result.combine([...])` | `Result.sequence(x)` | `Result.sequence(x)` |
+| `Result.combineWithAllErrors([...])` | `Result.collect(x)` | `Result.collect(x)` |
+| `ResultAsync.combine([...])` | `Result.sequence(x)` | `Result.sequenceAsync(x)` |
+| `ResultAsync.combineWithAllErrors([...])` | `Result.collect(x)` | `Result.collectAsync(x)` |
 | `r._unsafeUnwrap()` | `Result.unwrap(r)` | なし (`toEqual(ok(v))` か `isOk` で絞り込む) |
 | `ok(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `flow(r, f, g)` |
 | `okAsync(v).andThen(f).map(g)` | `Result.pipe(r, Result.andThen(f), Result.map(g))` | `flowAsync(r, f, g)` |

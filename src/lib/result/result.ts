@@ -457,3 +457,150 @@ export async function flowAsync(
   }
   return cur;
 }
+
+// ----------------------------------------------------------------------------
+// sequence / collect (複数の Result をまとめる)
+// ----------------------------------------------------------------------------
+
+// まとめる対象: Result の配列 (タプル) か、Result を値に持つオブジェクト
+type ResultRecord<R> = readonly R[] | { readonly [key: string]: R };
+
+// 配列なら要素、オブジェクトなら値の型
+type Item<T> = T extends readonly unknown[] ? T[number] : T[keyof T];
+
+// 成功値の型 / エラーの型を取り出す
+type OkOf<R> = R extends Success<infer V> ? V : never;
+type ErrOf<R> = R extends Failure<infer E> ? E : never;
+
+// 各 Result を成功値に置き換えた型 (タプルの形・オブジェクトのキーを保つ)
+type Values<T> = { -readonly [K in keyof T]: OkOf<T[K]> };
+type ValuesAsync<T> = { -readonly [K in keyof T]: OkOf<Awaited<T[K]>> };
+
+// 配列 / オブジェクトを [キー, 値] の並びにする
+const toEntries = <R>(x: ResultRecord<R>): [string | number, R][] =>
+  Array.isArray(x)
+    ? x.map((v, i): [number, R] => [i, v])
+    : Object.entries(x as { [key: string]: R });
+
+// 成功値を、入力と同じ形 (配列 / オブジェクト) に詰め直す
+const pack = (
+  isArray: boolean,
+  entries: [string | number, unknown][],
+): unknown =>
+  isArray ? entries.map(([, v]) => v) : Object.fromEntries(entries);
+
+const sequenceImpl = (
+  x: ResultRecord<Result<unknown, unknown>>,
+): Result<unknown, unknown> => {
+  const values: [string | number, unknown][] = [];
+  for (const [key, r] of toEntries(x)) {
+    if (isErr(r)) return r;
+    values.push([key, r.value]);
+  }
+  return ok(pack(Array.isArray(x), values));
+};
+
+const collectImpl = (
+  x: ResultRecord<Result<unknown, unknown>>,
+): Result<unknown, unknown[]> => {
+  const values: [string | number, unknown][] = [];
+  const errors: unknown[] = [];
+  for (const [key, r] of toEntries(x)) {
+    if (isErr(r)) errors.push(r.error);
+    else values.push([key, r.value]);
+  }
+  return errors.length > 0 ? err(errors) : ok(pack(Array.isArray(x), values));
+};
+
+// ResultAsync を含む配列 / オブジェクトをすべて await する
+const awaitAll = async (
+  x: ResultRecord<Result<unknown, unknown> | ResultAsync<unknown, unknown>>,
+): Promise<ResultRecord<Result<unknown, unknown>>> => {
+  const entries = toEntries(x);
+  const settled = await Promise.all(entries.map(([, r]) => r));
+  return Array.isArray(x)
+    ? settled
+    : Object.fromEntries(entries.map(([k], i) => [k, settled[i]]));
+};
+
+/**
+ * 複数の Result をまとめる。すべて成功なら成功値をまとめた Result、1 つでも失敗なら最初の Failure を返す
+ *
+ * - 配列 (タプル) とオブジェクトを受け取れ、入力と同じ形で成功値を返す
+ * - 「最初」は入力の順番で決まる
+ *
+ * @example
+ * ```typescript
+ * Result.sequence([ok(1), ok("a")]); // ok([1, "a"])  型: Result<[number, string], never>
+ * Result.sequence({ id: newId(x), mail: newEmail(y) }); // Result<{ id: Id; mail: Email }, ValidationError>
+ * ```
+ */
+export const sequence = <
+  const T extends ResultRecord<Result<unknown, unknown>>,
+>(
+  x: T,
+): Result<Values<T>, ErrOf<Item<T>>> =>
+  sequenceImpl(x) as Result<Values<T>, ErrOf<Item<T>>>;
+
+/**
+ * 複数の Result をまとめる。すべて成功なら成功値をまとめた Result、失敗があればすべてのエラーを配列で返す
+ *
+ * - 配列 (タプル) とオブジェクトを受け取れ、入力と同じ形で成功値を返す
+ * - エラーは入力の順番に並ぶ
+ *
+ * @example
+ * ```typescript
+ * // フォームの全項目を検証し、エラーをまとめて返す
+ * Result.collect({ id: newId(x), mail: newEmail(y) });
+ * // Result<{ id: Id; mail: Email }, ValidationError[]>
+ * ```
+ */
+export const collect = <const T extends ResultRecord<Result<unknown, unknown>>>(
+  x: T,
+): Result<Values<T>, ErrOf<Item<T>>[]> =>
+  collectImpl(x) as Result<Values<T>, ErrOf<Item<T>>[]>;
+
+/**
+ * `sequence` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
+ *
+ * すべての完了を待ってから、入力の順番で最初の Failure を返す
+ * (途中で失敗しても他の処理は止まらないため、完了を待つことで reject の取りこぼしを防ぐ)
+ *
+ * @example
+ * ```typescript
+ * const r = await Result.sequenceAsync({ user: fetchUser(id), posts: fetchPosts(id) });
+ * // Result<{ user: User; posts: Post[] }, ApiError>
+ * ```
+ */
+export const sequenceAsync = async <
+  const T extends ResultRecord<
+    Result<unknown, unknown> | ResultAsync<unknown, unknown>
+  >,
+>(
+  x: T,
+): ResultAsync<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>> =>
+  sequenceImpl(await awaitAll(x)) as Result<
+    ValuesAsync<T>,
+    ErrOf<Awaited<Item<T>>>
+  >;
+
+/**
+ * `collect` の非同期版。Result と ResultAsync を混ぜて渡せ、必ず Promise を返す
+ *
+ * @example
+ * ```typescript
+ * const r = await Result.collectAsync([saveA(a), saveB(b)]);
+ * // Result<[A, B], DbError[]>
+ * ```
+ */
+export const collectAsync = async <
+  const T extends ResultRecord<
+    Result<unknown, unknown> | ResultAsync<unknown, unknown>
+  >,
+>(
+  x: T,
+): ResultAsync<ValuesAsync<T>, ErrOf<Awaited<Item<T>>>[]> =>
+  collectImpl(await awaitAll(x)) as Result<
+    ValuesAsync<T>,
+    ErrOf<Awaited<Item<T>>>[]
+  >;
