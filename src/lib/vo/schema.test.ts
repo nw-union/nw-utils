@@ -117,21 +117,6 @@ describe("chain", () => {
   });
 });
 
-describe("brand", () => {
-  it("値はそのまま、型だけ変わる", () => {
-    const userId = v.chain(v.string, v.brand("UserId"));
-    type UserId = v.InferOutput<typeof userId>;
-    const r = userId("u1");
-    if (isErr(r)) throw new Error("unreachable");
-    const id: UserId = r.value;
-    expect<string>(id).toBe("u1");
-
-    // @ts-expect-error ただの string は UserId に代入できない
-    const bad: UserId = "u1";
-    expect<string>(bad).toBe("u1");
-  });
-});
-
 describe("emptyAsNull", () => {
   const optionalEmail = v.emptyAsNull(v.chain(v.string, v.email));
 

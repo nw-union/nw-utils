@@ -2,14 +2,13 @@
 
 外部依存のない、最小限のパーサー (スキーマ) と Value Object 生成ヘルパーです。
 
-パーサーを組み合わせて VO の形を宣言し、`newVo` で VO の生成関数にします。結果は `lib/rslt` の `Result` で返ります。
+パーサーを組み合わせて値の形を宣言し、`newVo` で brand 付きの VO 生成関数にします。結果は `lib/rslt` の `Result` で返ります。
 
 ```typescript
-import { newVo, v } from "@nw-union/nw-utils/lib/vo";
+import { type InferVo, newVo, v } from "@nw-union/nw-utils/lib/vo";
 
-const email = v.chain(v.string, v.email, v.brand("Email"));
-export type Email = v.InferOutput<typeof email>;
-export const newEmail = newVo(email, "Email");
+export const newEmail = newVo("Email", v.chain(v.string, v.email));
+export type Email = InferVo<typeof newEmail>; // string & Brand<"Email">
 
 newEmail("a@example.com"); // { type: "Success", value: "a@example.com" }
 newEmail("invalid"); // { type: "Failure", error: ValidationError }
@@ -20,6 +19,7 @@ newEmail("invalid"); // { type: "Failure", error: ValidationError }
 - **パーサーはただの関数**: すべてのパーサーは `(input) => Result<O, Issue>` です。`v.string(x)` のように直接呼べて、`rslt.step` や `rslt.andThen` にもそのまま渡せます
 - **引数のないパーサーは値**: `v.string` / `v.email` は値、`v.minLength(3)` のように引数があるものは「パーサーを返す関数」です
 - **chain は最初の失敗で止まる**: 失敗した時点で止まり、エラーは常に 1 件 (`Issue`) です
+- **brand は newVo が付ける**: VO の型名を書くのは `newVo("Email", ...)` の 1 か所だけです。付け忘れや、型名と brand 名の食い違いは起きません。パーサーは brand のない部品のままなので、自由に使い回せます
 - **生成関数は 1 引数**: `newVo` が返す関数は `(src: unknown) => Result<T, ValidationError>` なので、`inputs.map(newEmail)` のように関数として渡せます
 - **純粋**: 引数を書き換えず、同じ入力には同じ結果を返します。すべて同期です
 - **外部依存なし**: `lib/rslt` と `error.ts` だけを使います
@@ -39,14 +39,14 @@ type Schema<O> = Parser<unknown, O>;
 // パーサーの出力の型
 type InferOutput<P> = ...;
 
-// brand で付く型の印 (実行時には存在しない)
+// VO の型に付く印 (実行時には存在しない)
 type Brand<B extends string> = ...;
 
-// T に付いている brand 名 (null は除いて調べる。brand がなければ never)
-type BrandName<T> = ...;
+// newVo が返す生成関数から、VO の型を取り出す
+type InferVo<F> = ...;
 ```
 
-型は `v.InferOutput` のように `v` 経由でも、`import { type InferOutput }` のように名前でも参照できます。
+`InferOutput` は `v.InferOutput` のように `v` 経由でも参照できます。
 
 ## パーサー
 
@@ -86,18 +86,17 @@ type BrandName<T> = ...;
 | 関数 | 説明 |
 | --- | --- |
 | `v.chain(p1, p2, ...)` | パーサーを左から順につなげます (最大 10 個)。最初の失敗で止まります。前の出力型と次の入力型が合わないと型エラーになります |
-| `v.brand(name)` | 実行時は何もせず、型だけを `T & Brand<name>` にします |
 | `v.emptyAsNull(p)` | 空文字列 `""` なら `ok(null)`、それ以外は `p` に渡します。フォームの任意項目向けです |
 
 ```typescript
 const age = v.chain(v.number, v.integer, v.minValue(0), v.maxValue(150));
 
-// chain は入れ子にできる
+// chain は入れ子にできる。共通の部品を作って使い回せる
 const name = v.chain(v.string, v.nonEmpty, v.maxLength(20));
-const userName = v.chain(name, v.regex(/^[a-z0-9_]+$/), v.brand("UserName"));
+const userName = v.chain(name, v.regex(/^[a-z0-9_]+$/));
 
 // 任意項目
-const optionalEmail = v.emptyAsNull(email); // Schema<Email | null>
+const optionalName = v.emptyAsNull(name); // Schema<string | null>
 
 // 型が合わない組み合わせは型エラーになる
 v.chain(v.string, v.minValue(1)); // ❌ minValue は number 用
@@ -114,27 +113,36 @@ age("20"); // { type: "Failure", error: { message: 'Invalid type: Expected numbe
 
 | 関数 | 説明 |
 | --- | --- |
-| `newVo(schema, type)` | `(src: unknown) => Result<T, ValidationError>` を返します。`schema` の出力には `v.brand` が必要で、`type` は brand 名と同じ文字列にします |
+| `newVo(type, schema)` | `(src: unknown) => Result<T, ValidationError>` を返します。成功値の型には brand `type` が付きます |
 | `withName(name)` | `newVo` が返した `ValidationError` の表示名を差し替える関数を返します (`rslt.mapErr` 用) |
 
 ```typescript
-const email = v.chain(v.string, v.email, v.brand("Email"));
-export type Email = v.InferOutput<typeof email>;
-export const newEmail = newVo(email, "Email");
-export const newOptionalEmail = newVo(v.emptyAsNull(email), "Email");
+const email = v.chain(v.string, v.email);
+
+export const newEmail = newVo("Email", email);
+export type Email = InferVo<typeof newEmail>; // string & Brand<"Email">
+
+// 任意項目。null には brand が付かない
+export const newOptionalEmail = newVo("Email", v.emptyAsNull(email)); // Email | null
 
 newEmail("a@example.com"); // ok(Email)
 newOptionalEmail(""); // ok(null)
 inputs.map(newEmail); // Result<Email, ValidationError>[]
 ```
 
-`newVo` は次の場合にコンパイルエラーになります。VO には必ず brand を付け、エラーに出る型名と brand 名を揃えるためです。
+brand が違う VO は、中身が同じ `string` でも互いに代入できません。
 
 ```typescript
-newVo(v.chain(v.string, v.email), "Email"); // ❌ 出力に brand がない
-newVo(email, "Emial"); // ❌ type が brand 名 ("Email") と違う
-newVo(v.chain(v.email, v.brand("Email")), "Email"); // ❌ 先頭に型チェック (v.string など) がない
+const newUserId = newVo("UserId", v.string);
+const newPostId = newVo("PostId", v.string);
+type UserId = InferVo<typeof newUserId>;
+type PostId = InferVo<typeof newPostId>;
+
+const postId: PostId = userId; // ❌ 型エラー
+const s: string = userId; // ✅ string としては使える
 ```
+
+`schema` は `v.string` などの型チェックで始める必要があります。`newVo("Email", v.email)` は、`v.email` が `string` しか受け取れないので型エラーになります。
 
 失敗時の `ValidationError` は次のとおりです。
 
@@ -174,12 +182,12 @@ rslt.pipe(newEmail(input), rslt.mapErr(withName("userEmail")));
 
 ```typescript
 import { err, ok } from "@nw-union/nw-utils/lib/rslt";
-import { type Parser, v } from "@nw-union/nw-utils/lib/vo";
+import { newVo, type Parser, v } from "@nw-union/nw-utils/lib/vo";
 
 const startsWithA: Parser<string, string> = (s) =>
   s.startsWith("a") ? ok(s) : err({ message: "Must start with a" });
 
-const code = v.chain(v.string, startsWithA, v.brand("Code"));
+export const newCode = newVo("Code", v.chain(v.string, startsWithA));
 ```
 
 ## lib/valibot からの移行
@@ -187,15 +195,16 @@ const code = v.chain(v.string, startsWithA, v.brand("Code"));
 ```diff
 - import * as v from "valibot";
 - import { newType, newVoOrNone } from "@nw-union/nw-utils/lib/valibot";
-+ import { newVo, v } from "@nw-union/nw-utils/lib/vo";
++ import { type InferVo, newVo, v } from "@nw-union/nw-utils/lib/vo";
 
 - const email = v.pipe(v.string(), v.email(), v.brand("Email"));
-+ const email = v.chain(v.string, v.email, v.brand("Email"));
-  export type Email = v.InferOutput<typeof email>;
+- export type Email = v.InferOutput<typeof email>;
 - export const newEmail = newType(email, "Email");
 - export const newOptionalEmail = newVoOrNone(email, "Email");
-+ export const newEmail = newVo(email, "Email");
-+ export const newOptionalEmail = newVo(v.emptyAsNull(email), "Email");
++ const email = v.chain(v.string, v.email);
++ export const newEmail = newVo("Email", email);
++ export type Email = InferVo<typeof newEmail>;
++ export const newOptionalEmail = newVo("Email", v.emptyAsNull(email));
 
 - newEmail(input, "userEmail");
 + rslt.pipe(newEmail(input), rslt.mapErr(withName("userEmail")));
@@ -205,8 +214,10 @@ const code = v.chain(v.string, startsWithA, v.brand("Code"));
 | --- | --- |
 | `v.pipe(...)` | `v.chain(...)` |
 | `v.string()` / `v.email()` など引数のないもの | `v.string` / `v.email` (値) |
-| `newType(schema, type)` | `newVo(schema, type)` |
-| `newVoOrNone(schema, type)` | `newVo(v.emptyAsNull(schema), type)` |
+| `v.brand("Email")` | なし (`newVo("Email", ...)` が付ける) |
+| `v.InferOutput<typeof email>` (VO の型) | `InferVo<typeof newEmail>` |
+| `newType(schema, type)` | `newVo(type, schema)` (引数の順番が逆) |
+| `newVoOrNone(schema, type)` | `newVo(type, v.emptyAsNull(schema))` |
 | `newEmail(src, name)` | `rslt.mapErr(withName(name))` |
 | `v.safeParse(schema, input)` | `schema(input)` (Result を返す) |
 

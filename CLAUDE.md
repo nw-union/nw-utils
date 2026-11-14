@@ -136,18 +136,19 @@ const result = newEmail("test@example.com"); // Result<Email, ValidationError>
 - パーサーはすべて `Parser<I, O> = (input: I) => Result<O, Issue>` という純粋な関数。`Schema<O> = Parser<unknown, O>`
 - 部品は `v` 経由で使う。引数のないものは値、引数があるものは関数
   - 値: `string` / `number` / `boolean`, `nonEmpty` / `email`, `integer`
-  - 関数: `minLength(n)` / `maxLength(n)` / `length(n)` / `regex(re)`, `minValue(n)` / `maxValue(n)`, `brand(name)`
+  - 関数: `minLength(n)` / `maxLength(n)` / `length(n)` / `regex(re)`, `minValue(n)` / `maxValue(n)`
   - 組み合わせ: `chain(p1, p2, ...)` (Kleisli 合成。最初の失敗で止まり、エラーは 1 件), `emptyAsNull(p)` (空文字列を `ok(null)` にする)
-- 型: `Parser`, `Schema`, `Issue`, `InferOutput`, `Brand`, `BrandName`
-- VO ヘルパー: `newVo(schema, type)` (1 引数の `(src: unknown) => Result<T, ValidationError>` を返す。schema の出力に brand が必要で、type は brand 名と一致させる。満たさなければ型エラー), `withName(name)` (表示名を差し替える。`rslt.mapErr` 用)
+- パーサーには brand を付けない。brand は `newVo` が付ける
+- 型: `Parser`, `Schema`, `Issue`, `InferOutput`, `Brand`, `InferVo`
+- VO ヘルパー: `newVo(type, schema)` (1 引数の `(src: unknown) => Result<T & Brand<type>, ValidationError>` を返す。null には brand を付けない), `withName(name)` (表示名を差し替える。`rslt.mapErr` 用)
 
 ```typescript
-import { newVo, v } from "@nw-union/nw-utils/lib/vo";
+import { type InferVo, newVo, v } from "@nw-union/nw-utils/lib/vo";
 
-const email = v.chain(v.string, v.email, v.brand("Email"));
-export type Email = v.InferOutput<typeof email>;
-export const newEmail = newVo(email, "Email");
-export const newOptionalEmail = newVo(v.emptyAsNull(email), "Email");
+const email = v.chain(v.string, v.email);
+export const newEmail = newVo("Email", email);
+export type Email = InferVo<typeof newEmail>; // string & Brand<"Email">
+export const newOptionalEmail = newVo("Email", v.emptyAsNull(email)); // Email | null
 ```
 
 ### アダプター

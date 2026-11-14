@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ValidationError } from "../../error.js";
 import { isErr, type Result, rslt } from "../rslt/index.js";
-import { newVo, v, withName } from "./index.js";
+import { type Brand, type InferVo, newVo, v, withName } from "./index.js";
 
 // テスト用: 成功値 / エラーを取り出す (逆側なら throw してテストを失敗させる)
 const unwrap = <T, E>(r: Result<T, E>): T => {
@@ -14,14 +14,20 @@ const unwrapErr = <T, E>(r: Result<T, E>): E => {
   return r.error;
 };
 
-const email = v.chain(v.string, v.email, v.brand("Email"));
-type Email = v.InferOutput<typeof email>;
-const newEmail = newVo(email, "Email");
+const email = v.chain(v.string, v.email);
+const newEmail = newVo("Email", email);
+type Email = InferVo<typeof newEmail>;
 
 describe("newVo", () => {
   it("有効な値なら ok を返し、brand 付きの型になる", () => {
     const value: Email = unwrap(newEmail("test@example.com"));
     expect<string>(value).toBe("test@example.com");
+
+    // @ts-expect-error ただの string は Email に代入できない
+    const bad: Email = "test@example.com";
+    // 型は string & Brand<"Email">
+    const branded: string & Brand<"Email"> = value;
+    expect<string>(bad).toBe(branded);
   });
 
   it("無効な値なら ValidationError を返す", () => {
@@ -54,8 +60,8 @@ describe("newVo", () => {
     ]);
   });
 
-  it("emptyAsNull と組み合わせると任意項目になる", () => {
-    const newOptionalEmail = newVo(v.emptyAsNull(email), "Email");
+  it("emptyAsNull と組み合わせると任意項目になり、null には brand が付かない", () => {
+    const newOptionalEmail = newVo("Email", v.emptyAsNull(email));
     const value: Email | null = unwrap(newOptionalEmail(""));
 
     expect(value).toBeNull();
@@ -67,32 +73,31 @@ describe("newVo", () => {
 
   it("数値のパーサーでも使える", () => {
     const newAge = newVo(
-      v.chain(
-        v.number,
-        v.integer,
-        v.minValue(0),
-        v.maxValue(150),
-        v.brand("Age"),
-      ),
       "Age",
+      v.chain(v.number, v.integer, v.minValue(0), v.maxValue(150)),
     );
+    const age: number & Brand<"Age"> = unwrap(newAge(25));
 
-    expect<number>(unwrap(newAge(25))).toBe(25);
+    expect<number>(age).toBe(25);
     expect(unwrapErr(newAge(200)).details).toEqual([
       "Age: Invalid value: Expected <=150 but received 200",
     ]);
     expect(isErr(newAge("25"))).toBe(true);
   });
-});
 
-describe("newVo の型の制約", () => {
-  it("brand のないパーサーや、brand 名と違う type は型エラーになる", () => {
-    // @ts-expect-error 出力に brand がない
-    newVo(v.chain(v.string, v.email), "Email");
-    // @ts-expect-error type が brand 名と違う
-    newVo(email, "Emial");
-    // @ts-expect-error emptyAsNull を付けても brand がなければ型エラー
-    newVo(v.emptyAsNull(v.chain(v.string, v.email)), "Email");
+  it("brand が違う VO は互いに代入できない", () => {
+    const newUserId = newVo("UserId", v.string);
+    const newPostId = newVo("PostId", v.string);
+    const userId: InferVo<typeof newUserId> = unwrap(newUserId("u1"));
+
+    // @ts-expect-error UserId は PostId に代入できない
+    const postId: InferVo<typeof newPostId> = userId;
+    expect<string>(postId).toBe("u1");
+  });
+
+  it("型チェックで始まらないパーサーは型エラーになる", () => {
+    // @ts-expect-error v.email は string しか受け取れない
+    newVo("Email", v.email);
   });
 });
 

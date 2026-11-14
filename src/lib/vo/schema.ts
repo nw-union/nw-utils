@@ -27,21 +27,6 @@ export type InferOutput<P extends Parser<any, unknown>> =
   // biome-ignore lint/suspicious/noExplicitAny: 入力の型は問わない
   P extends Parser<any, infer O> ? O : never;
 
-declare const brandSymbol: unique symbol;
-
-/** brand で付与される型の印 (実行時には存在しない) */
-export type Brand<B extends string> = {
-  readonly [brandSymbol]: { readonly [K in B]: B };
-};
-
-/** T に付いている brand 名 (null は除いて調べる。brand がなければ never) */
-export type BrandName<T> =
-  NonNullable<T> extends {
-    readonly [brandSymbol]: infer M;
-  }
-    ? Extract<keyof M, string>
-    : never;
-
 // ----------------------------------------------------------------------------
 // 内部ヘルパー
 // ----------------------------------------------------------------------------
@@ -178,29 +163,15 @@ export const integer: Parser<number, number> = check<number>(
 // ----------------------------------------------------------------------------
 
 /**
- * 型に印を付ける。実行時は何もせず、型だけを `T & Brand<B>` に変える
- *
- * @example
- * ```typescript
- * const email = v.chain(v.string, v.email, v.brand("Email"));
- * type Email = v.InferOutput<typeof email>; // string & Brand<"Email">
- * ```
- */
-export const brand =
-  <B extends string>(_name: B) =>
-  <T>(input: T): Result<T & Brand<B>, Issue> =>
-    ok(input as T & Brand<B>);
-
-/**
  * 空文字列なら null を返し、それ以外は parser に渡すパーサーを作る
  *
  * フォーム入力など、未入力を null で表現したい任意項目に使う
  *
  * @example
  * ```typescript
- * const optionalEmail = v.emptyAsNull(email); // Schema<Email | null>
+ * const optionalEmail = v.emptyAsNull(v.chain(v.string, v.email)); // Schema<string | null>
  * optionalEmail("");              // ok(null)
- * optionalEmail("a@example.com"); // ok(Email)
+ * optionalEmail("a@example.com"); // ok("a@example.com")
  * ```
  */
 export const emptyAsNull =
