@@ -230,21 +230,21 @@ describe("Result との組み合わせ", () => {
   it("エラーのクラスごとに分岐できる", () => {
     const toStatus = (r: Result<{ name: string }, NotFound | Forbidden>) =>
       match(r)
-        .with({ type: "Success" }, () => 200)
-        .with({ type: "Failure", error: P.instanceOf(NotFound) }, () => 404)
-        .with({ type: "Failure", error: P.instanceOf(Forbidden) }, () => 403)
+        .ok(() => 200)
+        .err(P.instanceOf(NotFound), () => 404)
+        .err(P.instanceOf(Forbidden), () => 403)
         .exhaustive();
     expect([toStatus(find(1)), toStatus(find(2)), toStatus(find(3))]).toEqual([
       200, 403, 404,
     ]);
   });
 
-  it("handler は Success / Failure に絞り込まれる", () => {
+  it("handler は値 / エラーを受け取る", () => {
     match(find(1))
-      .with({ type: "Success" }, ({ value }) => {
+      .ok((value) => {
         assertType<Equal<typeof value, { name: string }>>();
       })
-      .with({ type: "Failure" }, ({ error }) => {
+      .err((error) => {
         assertType<Equal<typeof error, NotFound | Forbidden>>();
       });
   });
@@ -261,9 +261,9 @@ describe("Result との組み合わせ", () => {
   it("中身が一致しなければ次の分岐へ進む", () => {
     const greet = (r: Result<{ name: string }, NotFound | Forbidden>) =>
       match(r)
-        .with({ type: "Success", value: { name: "a" } }, () => "admin")
-        .with({ type: "Success", value: { name: P.select() } }, (name) => name)
-        .with({ type: "Failure" }, ({ error }) => error.message)
+        .ok({ name: "a" }, () => "admin")
+        .ok({ name: P.select() }, (name) => name)
+        .err((error) => error.message)
         .exhaustive();
     expect(greet(find(1))).toBe("admin");
     expect(greet(ok({ name: "b" }))).toBe("b");
@@ -273,8 +273,8 @@ describe("Result との組み合わせ", () => {
   it("中身の一部だけの分岐では網羅にならない", () => {
     const _check = (r: Result<{ name: string }, Error>) =>
       match(r)
-        .with({ type: "Success", value: { name: "a" } }, () => 1)
-        .with({ type: "Failure" }, () => 2)
+        .ok({ name: "a" }, () => 1)
+        .err(() => 2)
         // @ts-expect-error name が "a" 以外の Success が残る
         .exhaustive();
   });
@@ -367,16 +367,13 @@ describe("P.union", () => {
     expect([f("a"), f("b"), f("c")]).toEqual(["ab", "ab", "c"]);
   });
 
-  it("オブジェクトの中で使い、まとめて網羅できる", () => {
+  it(".err の中で使い、まとめて網羅できる", () => {
     const toStatus = (r: Result<number, NotFound | Forbidden>) =>
       match(r)
-        .with({ type: "Success" }, () => 200)
-        .with(
-          {
-            type: "Failure",
-            error: P.union(P.instanceOf(NotFound), P.instanceOf(Forbidden)),
-          },
-          ({ error }) => {
+        .ok(() => 200)
+        .err(
+          P.union(P.instanceOf(NotFound), P.instanceOf(Forbidden)),
+          (error) => {
             assertType<Equal<typeof error, NotFound | Forbidden>>();
             return 400;
           },
@@ -433,10 +430,10 @@ describe("到達しない分岐", () => {
   it("同じパターンを 2 回書くと型エラーになる", () => {
     const _check = (r: Result<number, Error>) =>
       match(r)
-        .with({ type: "Success" }, () => 1)
+        .ok(() => 1)
         // @ts-expect-error Success はすでに一致済み
         .with({ type: "Success" }, () => 2)
-        .with({ type: "Failure" }, () => 3);
+        .err(() => 3);
   });
 
   it("網羅した後の P._ は型エラーになる", () => {

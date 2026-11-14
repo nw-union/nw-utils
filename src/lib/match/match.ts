@@ -514,8 +514,8 @@ const builder = (input: unknown, state: State) => {
  * @example
  * ```typescript
  * const status = match(r) // Result<User, NotFoundError | ForbiddenError>
- *   .with({ type: "Success" }, ({ value }) => 200)
- *   .with({ type: "Failure", error: P.union(P.instanceOf(NotFoundError), P.instanceOf(ForbiddenError)) }, () => 400)
+ *   .ok(() => 200)
+ *   .err(P.union(P.instanceOf(NotFoundError), P.instanceOf(ForbiddenError)), () => 400)
  *   .exhaustive();
  * ```
  */
