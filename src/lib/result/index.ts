@@ -1,24 +1,26 @@
 /**
  * 最小限の Result 型ライブラリ
  *
- * - Result はクラスではなく plain object (`{ type, value }` / `{ type, error }`)
- * - 関数はすべて data-first の同期関数。sync/async が混ざる自動判定はしない
- * - 非同期は `ResultAsync<T, E>` (= `Promise<Result<T, E>>`) と async/await で扱う
+ * - 書き味は neverthrow に寄せている (`ok` / `err` / `r.isOk()` / `r.isErr()`)
+ * - Result は `{ type, value }` / `{ type, error }` の frozen object。メソッドは共有プロトタイプにのみ持つ
+ * - 変換関数はすべて data-first の同期関数。非同期は `flowAsync` か async/await で扱う
  *
  * @example
  * ```typescript
- * import { Result } from "@nw-union/nw-utils/lib/result";
+ * import { err, ok, Result } from "@nw-union/nw-utils/lib/result";
  *
  * const parse = (s: string): Result.Result<number, Error> =>
  *   Result.try(() => JSON.parse(s) as number, (e) => new Error(String(e)));
  *
- * const r = Result.map(parse("1"), (n) => n + 1); // Success<2>
+ * const r = parse("1");
+ * if (r.isOk()) console.log(r.value);
  *
  * const fetchUser = async (id: string): Result.ResultAsync<User, AppError> => {
  *   const valid = validateId(id);
- *   if (Result.isFailure(valid)) return valid;
+ *   if (valid.isErr()) return valid;
  *   return Result.tryAsync(() => api.get(valid.value), toAppError);
  * };
  * ```
  */
 export * as Result from "./result.js";
+export { err, ok } from "./result.js";

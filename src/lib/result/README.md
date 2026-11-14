@@ -5,21 +5,24 @@
 例外を投げる代わりに「成功」か「失敗」かを値として返し、エラーを型で明示的に扱えるようにします。
 
 ```typescript
-import { Result } from "@nw-union/nw-utils/lib/result";
+import { err, ok, Result } from "@nw-union/nw-utils/lib/result";
 ```
+
+`ok` / `err` は `Result.ok` / `Result.err` と同じものです。よく使うので直接 import できるようにしています。
 
 ## 特徴
 
-- **plain object**: Result はクラスではなく、ただのオブジェクトです
-- **同期関数のみ**: 変換関数 (`map` など) はすべて同期です。非同期は async/await で書きます
+- **neverthrow に近い書き味**: `ok(v)` / `err(e)` で作り、`r.isOk()` / `r.isErr()` で判定します
+- **クラスを使わない**: Result は `{ type, value }` / `{ type, error }` だけを持つ frozen object です。`isOk` / `isErr` は全 Result で共有する 1 つのプロトタイプにだけ置いています
+- **同期関数のみ**: 変換関数 (`map` など) はすべて同期です。非同期は `flowAsync` か async/await で書きます
 - **data-first**: `Result.map(result, fn)` のように、Result を第 1 引数に取ります
 - **外部依存なし**: 実装は 1 ファイルです
 
 ## 型
 
 ```typescript
-type Success<T> = { readonly type: "Success"; readonly value: T };
-type Failure<E> = { readonly type: "Failure"; readonly error: E };
+type Success<T> = { readonly type: "Success"; readonly value: T } & { isOk(); isErr() };
+type Failure<E> = { readonly type: "Failure"; readonly error: E } & { isOk(); isErr() };
 
 type Result<T, E> = Success<T> | Failure<E>;
 type ResultAsync<T, E> = Promise<Result<T, E>>;
@@ -38,15 +41,15 @@ const fetchUser = async (id: string): Result.ResultAsync<User, AppError> => { ..
 
 | 関数 | 説明 |
 | --- | --- |
-| `succeed(value)` | 成功の Result を作る。引数なしなら `Result<void, never>` |
-| `fail(error)` | 失敗の Result を作る |
+| `ok(value)` | 成功の Result を作る。引数なしなら `Result<void, never>` |
+| `err(error)` | 失敗の Result を作る |
 | `try(fn, onError)` | 同期関数を実行し、throw されたら `onError` の戻り値で Failure にする |
 | `tryAsync(fn, onError)` | 非同期関数を実行し、reject (または同期的な throw) を Failure にする |
 
 ```typescript
-Result.succeed(1); // { type: "Success", value: 1 }
-Result.succeed(); // { type: "Success", value: undefined }
-Result.fail(new ValidationError("invalid")); // { type: "Failure", error: ValidationError }
+ok(1); // { type: "Success", value: 1 }
+ok(); // { type: "Success", value: undefined }
+err(new ValidationError("invalid")); // { type: "Failure", error: ValidationError }
 
 // 例外を投げうる処理を Result に変換する
 const parsed = Result.try(
@@ -73,17 +76,31 @@ const res = await Result.tryAsync(
 
 | 関数 | 説明 |
 | --- | --- |
-| `isSuccess(r)` | 成功なら `true`。型ガードとして `r.value` にアクセスできるようになる |
-| `isFailure(r)` | 失敗なら `true`。型ガードとして `r.error` にアクセスできるようになる |
+| `r.isOk()` | 成功なら `true`。型ガードとして `r.value` にアクセスできるようになる |
+| `r.isErr()` | 失敗なら `true`。型ガードとして `r.error` にアクセスできるようになる |
 
 ```typescript
 const r = newEmail(input);
-if (Result.isFailure(r)) {
+if (r.isErr()) {
   logger.warn("invalid email", r.error); // r.error: ValidationError
   return;
 }
 sendMail(r.value); // r.value: Email
 ```
+
+`isErr()` で絞り込んだ Failure は、成功値の型が違う関数からもそのまま返せます。
+
+```typescript
+const toUser = (r: Result.Result<string, AuthError>): Result.Result<User, AuthError> => {
+  if (r.isErr()) return r; // err(r.error) と書き直さなくてよい
+  return ok({ mail: r.value });
+};
+```
+
+> [!NOTE]
+> Result の実体は「共有プロトタイプ + own プロパティ (`type`, `value` / `error`)」です。次の操作をするとメソッドが失われるので、Result として扱いたい場合は `ok` / `err` で作り直してください。
+> - スプレッド (`{ ...r }`) や `structuredClone`
+> - `JSON.stringify` → `JSON.parse` (JSON に出るのは `{"type":"Success","value":...}` だけ)
 
 ### 変換
 
@@ -122,14 +139,14 @@ Result.orElse(getTokenFromHeader(req, "Authorization"), () =>
 普通の関数をそのまま並べられます。各関数には直前の **成功値** が渡されます。
 
 - 関数が Result を返したら、その Result を使う (`andThen` 相当)
-- 関数が Result 以外の値を返したら、`succeed` で包む (`map` 相当)
+- 関数が Result 以外の値を返したら、`ok` で包む (`map` 相当)
 - **途中で Failure になったら、その時点で残りの関数は呼ばずに Failure を返す**
 
 ```typescript
 // getToken:    (req: Request) => Result<string, AuthError>
 // tokenToUser: (token: string) => User
 // saveUser:    (user: User) => Result<UserId, DbError>
-const r = Result.flow(Result.succeed(req), getToken, tokenToUser, saveUser);
+const r = Result.flow(ok(req), getToken, tokenToUser, saveUser);
 // r: Result<UserId, AuthError | DbError>
 ```
 
@@ -138,7 +155,7 @@ const r = Result.flow(Result.succeed(req), getToken, tokenToUser, saveUser);
 ```typescript
 // verifyToken: (token: string) => ResultAsync<Payload, AuthError>
 const r = await Result.flowAsync(
-  Result.succeed(req),
+  ok(req),
   getToken,
   verifyToken,
   toUser,
@@ -151,7 +168,7 @@ const r = await Result.flowAsync(
 > - `flow` に Promise を返す関数を渡すと型エラーになります
 > - 関数が throw / reject した場合は Failure にならず、そのまま例外になります。例外を投げうる処理は `try` / `tryAsync` で Result に変換してから渡してください
 > - `orElse` / `mapError` のような失敗側の処理は `flow` の中には書けません。`flow` の結果に対して呼んでください
-> - Result かどうかは `{ type: "Success", value }` / `{ type: "Failure", error }` という形で判定します。成功値としてこの形のオブジェクトを返すと Result として扱われます (型の推論も同じ扱いになります)
+> - Result かどうかは `ok` / `err` で作られたかどうかで判定します。`{ type: "Failure", error }` のような形のデータを返しても Result としては扱われません (型の推論も同じ扱いになります)
 
 ### 取り出し
 
@@ -160,7 +177,7 @@ const r = await Result.flowAsync(
 | `unwrap(r)` | 成功値を取り出す。失敗なら `error` を throw する |
 | `unwrapError(r)` | エラーを取り出す。成功なら throw する |
 
-throw するので、主にテストで使います。アプリケーションコードでは `isSuccess` / `isFailure` で分岐してください。
+throw するので、主にテストで使います。アプリケーションコードでは `r.isOk()` / `r.isErr()` で分岐してください。
 
 ```typescript
 expect(Result.unwrap(newEmail("a@example.com"))).toBe("a@example.com");
@@ -169,17 +186,17 @@ expect(Result.unwrapError(newEmail("invalid")).code).toBe("Validation Error");
 
 ## 非同期処理の書き方
 
-変換関数 (`map`, `andThen` など) は同期の Result だけを受け取ります。非同期処理は `flowAsync` でつなげるか、async 関数の中で `await` と `isFailure` による早期 return でつなげます。
+変換関数 (`map`, `andThen` など) は同期の Result だけを受け取ります。非同期処理は `flowAsync` でつなげるか、async 関数の中で `await` と `r.isErr()` による早期 return でつなげます。
 
 ```typescript
 const auth = async (req: Request): Result.ResultAsync<User, AuthError> => {
   // step.1 同期処理
   const token = getToken(req);
-  if (Result.isFailure(token)) return token;
+  if (token.isErr()) return token;
 
   // step.2 非同期処理
   const payload = await verifyToken(token.value);
-  if (Result.isFailure(payload)) return payload;
+  if (payload.isErr()) return payload;
 
   // step.3 同期の変換
   return Result.map(payload, toUser);
@@ -190,7 +207,7 @@ const auth = async (req: Request): Result.ResultAsync<User, AuthError> => {
 
 ## パターンマッチ
 
-Result は plain object なので、`ts-pattern` でそのまま分岐できます。
+Result は `type` を持つオブジェクトなので、`ts-pattern` でそのまま分岐できます。
 
 ```typescript
 import { match } from "ts-pattern";
@@ -205,8 +222,8 @@ const message = match(result)
 
 | neverthrow | @praha/byethrow | lib/result |
 | --- | --- | --- |
-| `ok(v)` / `err(e)` | `Result.succeed(v)` / `Result.fail(e)` | `Result.succeed(v)` / `Result.fail(e)` |
-| `r.isOk()` / `r.isErr()` | `Result.isSuccess(r)` / `Result.isFailure(r)` | `Result.isSuccess(r)` / `Result.isFailure(r)` |
+| `ok(v)` / `err(e)` | `Result.succeed(v)` / `Result.fail(e)` | `ok(v)` / `err(e)` |
+| `r.isOk()` / `r.isErr()` | `Result.isSuccess(r)` / `Result.isFailure(r)` | `r.isOk()` / `r.isErr()` |
 | `r.map(f)` | `Result.pipe(r, Result.map(f))` | `Result.map(r, f)` |
 | `r.mapErr(f)` | `Result.pipe(r, Result.mapError(f))` | `Result.mapError(r, f)` |
 | `r.andThen(f)` | `Result.pipe(r, Result.andThen(f))` | `Result.andThen(r, f)` |

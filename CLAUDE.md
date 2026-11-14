@@ -71,11 +71,11 @@ AppError (基底クラス)
 
 #### Result ライブラリ (lib/result/)
 
-外部依存のない最小限の Result 型。`import { Result } from "@nw-union/nw-utils/lib/result"` で使う。
+外部依存のない最小限の Result 型。書き味は neverthrow に寄せている。`import { err, ok, Result } from "@nw-union/nw-utils/lib/result"` で使う。
 
-- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の plain object), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
-- 生成: `succeed`, `fail`, `try` (同期), `tryAsync` (非同期)
-- 判定: `isSuccess`, `isFailure` (型ガード)
+- 型: `Result.Result<T, E>` (`{ type: "Success", value }` | `{ type: "Failure", error }` の frozen object。メソッドは共有プロトタイプに持つ), `Result.ResultAsync<T, E>` (= `Promise<Result<T, E>>`)
+- 生成: `ok`, `err`, `try` (同期), `tryAsync` (非同期)
+- 判定: `r.isOk()`, `r.isErr()` (型ガード)
 - 変換: `map`, `mapError`, `andThen`, `orElse` (すべて同期・data-first)
 - 取り出し: `unwrap`, `unwrapError` (失敗時は throw。主にテスト用)
 - 連結: `flow`, `flowAsync` (普通の関数を並べてつなげる。途中で Failure になったらそこで止まる)
@@ -85,7 +85,7 @@ AppError (基底クラス)
 ```typescript
 const f = async (id: string): Result.ResultAsync<User, AppError> => {
   const valid = validateId(id);
-  if (Result.isFailure(valid)) return valid;
+  if (valid.isErr()) return valid;
   return Result.tryAsync(() => fetchUser(valid.value), toAppError);
 };
 ```
