@@ -1,6 +1,6 @@
 {
   "name": "@nw-union/nw-utils",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Our Typescript Utility Library",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -69,11 +69,11 @@
     "url": "git+https://github.com/nw-union/nw-utils.git"
   },
   "dependencies": {
-    "valibot": "^1.3.1",
-    "zod": "^4.3.6"
+    "valibot": "^1.5.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.10",
-    "@types/bun": "^1.3.11"
+    "@biomejs/biome": "^2.6.8",
+    "@types/bun": "^1.4.4"
   }
 }
